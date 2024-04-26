@@ -225,7 +225,7 @@ class Main
 
         return [
             'name' => $docker_name,
-            'title' => $json[0]->Config->Labels->{"org.opencontainers.image.title"} ?? '',
+            'title' => $json[0]->Config->Labels->{"org.opencontainers.image.title"} ?: $docker_name,
             'icon' => $this->getDockerContainerIcon($docker_name),
         ];
     }
