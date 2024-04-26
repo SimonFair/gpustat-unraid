@@ -31,10 +31,6 @@ span.gpu {
     display: inline-block;
 }
 
-span.gpu-img-span {
-    display: none;
-}
-
 .gpu-image {
     padding-left: 8px;
     height: 32px;

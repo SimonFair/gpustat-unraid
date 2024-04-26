@@ -22,6 +22,7 @@
   SOFTWARE.
 */
 
+const gpustat_app_list = [];
 const gpustat_status = () => {
     $.getJSON('/plugins/gpustat/gpustatus.php', (data) => {
         if (data) {
@@ -39,15 +40,37 @@ const gpustat_status = () => {
                         $('.gpu-'+metric+'bar').removeAttr('style').css('width', data[metric]);
                     });
 
-                    if (data["appssupp"]) {
-                        data["appssupp"].forEach(function (app) {
-                            if (data[app + "using"]) {
-                                $('.gpu-img-span-'+app).css('display', "inline");
-                                $('#gpu-'+app).attr('title', "Count: " + data[app+"count"] + " Memory: " + data[app+"mem"] + "MB");
+                    if (data["active_apps"]) {
+                        const appList = [];
+                        $('.gpu-active-apps .gpu-img-span').each(function () {
+                            appList.push($(this).data('name'));
+                        });
+                        const active_apps = [];
+                        data["active_apps"].forEach(function (app) {
+                            active_apps.push(app.name);
+                            if (appList.includes(app.name)) {
+                                const current_app = gpustat_app_list.findIndex(x => x.name == app.name);
+                                gpustat_app_list[current_app].img.title = 'App: ' + app.title + ' - Count: ' + app.count + ' - Memory: ' + app.mem + 'MB';
                             } else {
-                                $('.gpu-img-span-'+app).css('display', "none");
-                                $('#gpu-'+app).attr('title', "");
+                                const img = document.createElement('img');
+                                img.className = 'gpu-image';
+                                img.src = app.icon;
+                                img.alt = app.title;
+                                img.title = 'App: ' + app.title + ' - Count: ' + app.count + ' - Memory: ' + app.mem + 'MB';
+
+                                gpustat_app_list.push({ 'name': app.name, 'img': img });
+
+                                const span = document.createElement('span');
+                                span.className = 'gpu-img-span';
+                                span.setAttribute('data-name', app.name);
+                                span.append(img);
+
+                                document.querySelector('.gpu-active-apps td').append(span);
                             }
+                        });
+                        document.querySelectorAll('.gpu-active-apps td span.gpu-img-span').forEach(x => {
+                            if (!active_apps.includes(x.getAttribute('data-name')))
+                                x.remove();
                         });
                     }
                     break;

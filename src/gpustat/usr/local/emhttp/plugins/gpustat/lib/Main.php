@@ -37,6 +37,9 @@ class Main
 {
     const PLUGIN_NAME = 'gpustat';
     const COMMAND_EXISTS_CHECKER = 'which';
+    const DOCKER_INSPECT = 'docker container inspect';
+    const DOCKER_ICON_DEFAULT_PATH = '/plugins/dynamix.docker.manager/images/question.png';
+    const DOCKER_ICON_PATH = '/var/local/emhttp/plugins/dynamix.docker.manager/docker.json';
 
     /**
      * @var array
@@ -182,6 +185,66 @@ class Main
         }
 
         return $command;
+    }
+
+    /**
+     * Retrieves the control group for a given process ID
+     *
+     * @param int $pid
+     * @return string
+     */
+    protected function getControlGroup(int $pid): string
+    {
+        $cgroup = '';
+        $file = sprintf('/proc/%0d/cgroup', $pid);
+
+        if (file_exists($file)) {
+            $cgroup = trim(@file_get_contents($file), "\0");
+        }
+
+        return $cgroup;
+    }
+
+    /**
+     * Retrieves docker container info for a given docker ID
+     *
+     * @param string $id
+     * @return array
+     */
+    protected function getDockerContainerInspect(string $id): array
+    {
+        $this->runCommand(self::DOCKER_INSPECT, $id);
+
+        $json = json_decode($this->stdout);
+        if (!$json || !isset($json[0]->Config->Labels)) {
+            return [];
+        }
+
+        $docker_name = $json[0]->Name;
+        $docker_name = preg_replace('/^\//', '', $docker_name);
+
+        return [
+            'name' => $docker_name,
+            'title' => $json[0]->Config->Labels->{"org.opencontainers.image.title"} ?? '',
+            'icon' => $this->getDockerContainerIcon($docker_name),
+        ];
+    }
+
+    /**
+     * Retrieves docker container icon for a given docker NAME
+     *
+     * @param string $name
+     * @return string
+     */
+    protected function getDockerContainerIcon(string $name): string
+    {
+        if (!file_exists(self::DOCKER_ICON_PATH)) {
+            return self::DOCKER_ICON_DEFAULT_PATH;
+        }
+
+        $json = json_decode(file_get_contents(self::DOCKER_ICON_PATH));
+
+        return $json->$name->icon ?: self::DOCKER_ICON_DEFAULT_PATH;
     }
 
     /**
