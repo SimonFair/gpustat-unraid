@@ -39,14 +39,8 @@ class Nvidia extends Main
     const INVENTORY_PARM_PCI = "-q -x -g %s 2>&1 | grep 'gpu id'";
     const INVENTORY_REGEX = '/GPU\s(?P<id>\d):\s(?P<model>.*)\s\(UUID:\s(?P<guid>GPU-[0-9a-f-]+)\)/i';
     const PCI_INVENTORY_UTILITY = 'lspci';
-    const PCI_INVENTORY_PARAM = '| grep VGA';
     const PCI_INVENTORY_PARAMm = " -Dmm | grep VGA";
-    const PCD_INVENTORY_REGEX =
-        '/^(?P<busid>[0-9a-f]{2}).*\[AMD(\/ATI)?\]\s+(?P<model>.+)\s+(\[(?P<product>.+)\]|\()/imU';
-
     const STATISTICS_PARAM = '-q -x -g %s 2>&1';
-
-
 
     /**
      * Nvidia constructor.
@@ -59,34 +53,44 @@ class Nvidia extends Main
     }
 
     /**
-     * Iterates supported applications and their respective commands to match against processes using GPU hardware
+     * Retrieve application data from processes using GPU hardware
      *
      * @param SimpleXMLElement $process
      */
     private function detectApplication(SimpleXMLElement $process)
     {
-        $pid_info = $this->getControlGroup((int) $process->pid);
-        if (!preg_match('/docker\/([a-z0-9]+)$/', $pid_info, $matches)) {
-            return;
+        $dockerInfo = null;
+        $controlGroup = $this->getControlGroup((int) $process->pid);
+        $usedMemory = (int) $this->stripText(' MiB', $process->used_memory);
+
+        if ($controlGroup && preg_match('/docker\/([a-z0-9]+)$/', $controlGroup, $matches)) {
+            $dockerInfo = $this->getDockerContainerInspect($matches[1]);
         }
 
-        $dockerInfo = $this->getDockerContainerInspect($matches[1]);
-        if (!$dockerInfo) {
-            return;
-        }
-
-        $index = array_search($dockerInfo['title'], array_column($this->pageData['active_apps'], 'title'));
-
-        if ($index === false) {
-            $this->pageData['active_apps'][] = [
-                'name' => $dockerInfo['name'],
-                'title' => $dockerInfo['title'],
-                'icon' => $dockerInfo['icon'],
-                'mem' => (int)$this->stripText(' MiB', $process->used_memory),
+        if (!$controlGroup || !$dockerInfo) {
+            $active_app = [
+                'name' => (string) $process->process_name,
+                'title' => (string) $process->process_name,
+                'icon' => self::DOCKER_ICON_DEFAULT_PATH,
+                'mem' => $usedMemory,
                 'count' => 1,
             ];
         } else {
-            $this->pageData['active_apps'][$index]['mem'] += (int)$this->stripText(' MiB', $process->used_memory);
+            $active_app = [
+                'name' => $dockerInfo['name'],
+                'title' => $dockerInfo['title'],
+                'icon' => $dockerInfo['icon'],
+                'mem' => $usedMemory,
+                'count' => 1,
+            ];
+        }
+
+        $index = array_search($active_app['name'], array_column($this->pageData['active_apps'], 'name'));
+
+        if ($index === false) {
+            $this->pageData['active_apps'][] = $active_app;
+        } else {
+            $this->pageData['active_apps'][$index]['mem'] += $usedMemory;
             $this->pageData['active_apps'][$index]['count']++;
         }
     }
