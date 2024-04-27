@@ -34,7 +34,6 @@ function toggleVFIO(vfio,panel) {
     }
   }
 
-const gpustat_app_list = [];
 const gpustat_statusm = (input) => {
     $.getJSON('/plugins/gpustat/gpustatusmulti.php?gpus='+JSON.stringify(input), (data2) => {
         if (data2) {
@@ -61,26 +60,23 @@ const gpustat_statusm = (input) => {
                             $('.gpu-active-apps' + panel + ' .gpu-img-span').each(function () {
                                 appList.push($(this).data('name'));
                             });
+                            const active_apps = [];
                             data["active_apps"].forEach(function (app) {
+                                active_apps.push(app.name);
                                 if (appList.includes(app.name)) {
-                                    const current_app = gpustat_app_list.findIndex(x => x.name == app.name);
-                                    gpustat_app_list[current_app].img.title = 'App: ' + app.title + ' - Count: ' + app.count + ' - Memory: ' + app.mem + 'MB';
+                                    const title = 'App: ' + app.title + ' - Count: ' + app.count + ' - Memory: ' + app.mem + 'MB';
+                                    $('.gpu-active-apps' + panel + ' td span[data-name="' + app.name + '"] img').attr('title', title);
                                 } else {
-                                    const img = document.createElement('img');
-                                    img.className = 'gpu-image';
-                                    img.src = app.icon;
-                                    img.alt = app.title;
-                                    img.title = 'App: ' + app.title + ' - Count: ' + app.count + ' - Memory: ' + app.mem + 'MB';
-
-                                    gpustat_app_list.push({ 'name': app.name, 'img': img });
-
-                                    const span = document.createElement('span');
-                                    span.className = 'gpu-img-span';
-                                    span.setAttribute('data-name', app.name);
+                                    const title = 'App: ' + app.title + ' - Count: ' + app.count + ' - Memory: ' + app.mem + 'MB';
+                                    const img = $('<img class="gpu-image" src="' + app.icon + '" title="' + title + '">');
+                                    const span = $('<span class="gpu-img-span" data-name="' + app.name + '"></span>');
                                     span.append(img);
-
-                                    document.querySelector('.gpu-active-apps' + panel + ' td').append(span);
+                                    $('.gpu-active-apps' + panel + ' td').append(span);
                                 }
+                            });
+                            $('.gpu-active-apps' + panel + ' td span.gpu-img-span').each(function () {
+                                if (!active_apps.includes($(this).data('name')))
+                                    $(this).remove();
                             });
                         }
                         break;
