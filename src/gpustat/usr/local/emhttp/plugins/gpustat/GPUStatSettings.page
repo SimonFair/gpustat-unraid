@@ -64,23 +64,23 @@ Title="GPU Statistics"
             $json_array[$pciid]['vendor'] = $gpus[$gpupciid]['vendor'] ;
             $json_array[$pciid]['guid'] = $gpus[$gpupciid]['guid'] ;
           }
-        } else {                
+        } else {
           $json_array[$pciid]['id'] = "None";
           $json_array[$pciid]['model'] = "None";
           $json_array[$pciid]['vendor'] = "None";
           $json_array[$pciid]['guid'] = "None";
         }
         $val["MULTIGPUJSON"] = urlencode(json_encode($json_array)) ;
-        if (isset($val['MULTIGPU'])) {      
+        if (isset($val['MULTIGPU'])) {
           if($val['MULTIGPU'] != "") $val['MULTIGPU'] = implode("," , $val['MULTIGPU']) ;
         } else $val['MULTIGPU'] = "" ;
       }
-      
+
       save_ini_file("gpustat.cfg", $val) ;
     }
 
-    $cfg = $gpustat_cfg        = parse_plugin_cfg("gpustat", true);
-    $gpustat_inventory  = true;
+    $cfg = $gpustat_cfg = parse_plugin_cfg("gpustat", true);
+    $gpustat_inventory = true;
 
     $multi_enable=version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.12.0-beta5', '>') ;
 
@@ -90,8 +90,8 @@ Title="GPU Statistics"
       include_once './plugins/gpustat/gpustatus.php';
     }
 
-    
-  
+
+
     $multi_enable=version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.12.0-beta5', '>') ;
 
     if (count($_POST)) {
@@ -99,9 +99,16 @@ Title="GPU Statistics"
       if ($_POST['#apply'] == "_(Apply)_") {
         array_map(function($k, $v) use (&$cfg) { if($k[0] != "#") $cfg[$k] = $v; }, array_keys($_POST), $_POST );
         save_cfg($cfg,$gpustat_data) ;
-        $gpustat_cfg        = parse_plugin_cfg("gpustat", true);
-        unset($_POST) ;
-      } 
+
+        // Restart nchan gpustat if not running when refresh setting set to Yes
+        $pid = exec('pgrep gpustat');
+        if (!$pid && $_POST['UIREFRESH'] == '1' && $gpustat_cfg['UIREFRESH'] != '1') {
+            exec('/usr/local/emhttp/plugins/gpustat/nchan/gpustat &>/dev/null &');
+        }
+
+        $gpustat_cfg = parse_plugin_cfg("gpustat", true);
+        unset($_POST);
+      }
     }
 
 ?>
@@ -142,8 +149,8 @@ Unit ID for Dashboard:
 <?php if ($multi_enable) : ?>
 Unit ID for Dashboard(Multiple):
 :  <select id="MULTIGPU" name="MULTIGPU[]" multiple="multiple" style="display:none">
-   
- <?php	
+
+ <?php
 	  if (isset($gpustat_data)) {
       ksort($gpustat_data) ;
       foreach ($gpustat_data AS $gpu) {
@@ -273,7 +280,7 @@ Power Draw Selection:
     <?=mk_option($gpustat_cfg['DISPPWRDRWSEL'], "GPU", "GPU");?>
     <?=mk_option($gpustat_cfg['DISPPWRDRWSEL'], "PACKAGE", "Package");?>
     <?=mk_option($gpustat_cfg['DISPPWRDRWSEL'], "MAX", "Max of GPU or Package");?>
-  </select>  
+  </select>
 
 
 <h4><b>AMD Specific</b></h4>
