@@ -31,11 +31,6 @@ Cond="version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.12.0-b
 
     $gpu_nv = $gpu_intel = $gpu_amd = $gpu_unknown = false;
 
-    $apps = [
-        'plex', 'jellyfin', 'handbrake', 'emby', 'tdarr', 'unmanic', 'dizquetv', 'ersatztv',
-        'fileflows', 'frigate', 'deepstack', 'nsfminer', 'shinobipro', 'foldinghome', 'compreface',
-    ];
-
     switch ($gpustat_cfg['VENDOR']) {
         case "nvidia":
             $gpu_nv = true;
@@ -161,16 +156,10 @@ Cond="version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.12.0-b
         </tr>
 <?php endif; ?>
 <?php if($gpustat_cfg['DISPSESSIONS']) : ?>
-        <tr class="dash_gpustat_toggle gpu-enviro">
+        <tr class="dash_gpustat_toggle gpu-enviro gpu-active-apps">
             <td></td>
             <td>Active Apps</td>
-            <td colspan="2">
-<?php foreach($apps as $app): ?>
-                <span id="gpu-img-span-<?= $app; ?>" class='gpu-img-span gpu-img-span-<?= $app; ?>'>
-                    <img id='gpu-<?= $app; ?>' class='gpu-image' src="/plugins/gpustat/images/<?= $app; ?>.png">
-                </span>
-<?php endforeach; ?>
-            </td>
+            <td colspan="2"></td>
             <td></td>
         </tr>
 <?php endif; ?>
