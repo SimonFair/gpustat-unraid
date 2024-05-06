@@ -30,13 +30,11 @@ include 'lib/Main.php';
 include 'lib/Nvidia.php';
 include 'lib/Intel.php';
 include 'lib/AMD.php';
-include 'lib/Error.php';
 
 use gpustat\lib\AMD;
 use gpustat\lib\Main;
 use gpustat\lib\Nvidia;
 use gpustat\lib\Intel;
-use gpustat\lib\Error;
 
 if (!isset($gpustat_cfg)) {
     $gpustat_cfg = Main::getSettings();
@@ -47,26 +45,4 @@ if (isset($gpustat_inventory) && $gpustat_inventory) {
     $gpustat_cfg['inventory'] = true;
     // Settings page looks for $gpustat_data specifically -- inventory all supported GPU types
     $gpustat_data = array_merge((new Nvidia($gpustat_cfg))->getInventory(), (new Intel($gpustat_cfg))->getInventory(), (new AMD($gpustat_cfg))->getInventory());
-} else {
-
-    switch ($gpustat_cfg['VENDOR']) {
-        case 'amd':
-            $data = (new AMD($gpustat_cfg))->getStatistics();
-            break;
-        case 'intel':
-            $data = (new Intel($gpustat_cfg))->getStatistics();
-            break;
-        case 'nvidia':
-            $data = (new Nvidia($gpustat_cfg))->getStatistics();
-            break;
-        default:
-            print_r(Error::get(Error::CONFIG_SETTINGS_NOT_VALID));
-    }
-    $json = $data ;
-    header('Content-Type: application/json');
-    header('Content-Length:' . ES . strlen($json));
-    echo $json;
-    file_put_contents("/tmp/gpujson2","Time = ".date(DATE_RFC2822)."\n") ;
-    file_put_contents("/tmp/gpujson2",$json."\n",FILE_APPEND) ;
-
 }

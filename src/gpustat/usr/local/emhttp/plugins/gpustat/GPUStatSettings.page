@@ -98,14 +98,7 @@ Title="GPU Statistics"
       $cfg = NULL ;
       if ($_POST['#apply'] == "_(Apply)_") {
         array_map(function($k, $v) use (&$cfg) { if($k[0] != "#") $cfg[$k] = $v; }, array_keys($_POST), $_POST );
-        save_cfg($cfg,$gpustat_data) ;
-
-        // Restart nchan gpustat if not running when refresh setting set to Yes
-        $pid = exec('pgrep gpustat');
-        if (!$pid && $_POST['UIREFRESH'] == '1' && $gpustat_cfg['UIREFRESH'] != '1') {
-            exec('/usr/local/emhttp/plugins/gpustat/nchan/gpustat &>/dev/null &');
-        }
-
+        save_cfg($cfg,$gpustat_data);
         $gpustat_cfg = parse_plugin_cfg("gpustat", true);
         unset($_POST);
       }
