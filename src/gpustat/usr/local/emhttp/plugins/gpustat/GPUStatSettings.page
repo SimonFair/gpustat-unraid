@@ -82,17 +82,13 @@ Title="GPU Statistics"
     $cfg = $gpustat_cfg = parse_plugin_cfg("gpustat", true);
     $gpustat_inventory = true;
 
-    $multi_enable=version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.12.0-beta5', '>') ;
+    $multi_enable = version_compare(parse_ini_file('/etc/unraid-version')['version'], '6.12.0-beta5', '>');
 
     if ($multi_enable) {
       include_once './plugins/gpustat/gpustatusmulti.php';
     } else {
       include_once './plugins/gpustat/gpustatus.php';
     }
-
-
-
-    $multi_enable=version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.12.0-beta5', '>') ;
 
     if (count($_POST)) {
       $cfg = NULL ;
