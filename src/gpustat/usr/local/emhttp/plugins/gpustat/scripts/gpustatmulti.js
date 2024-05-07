@@ -56,15 +56,18 @@ const parseStats = (data2) => {
 
                         if (data["active_apps"]) {
                             const appList = [];
-                            $('.gpu-active-apps .gpu-img-span', panel).each(function () {
-                                appList.push($(this).data('name'));
-                            });
                             const active_apps = [];
+                            $('.gpu-active-apps .gpu-img-span', panel).each(function () {
+                                const name = $(this).data('name');
+                                if (!appList.includes(name)) {
+                                    appList.push(name);
+                                }
+                            });
                             data["active_apps"].forEach(function (app) {
                                 active_apps.push(app.name);
                                 const title = 'Count: ' + app.count + ' - Memory: ' + app.mem + 'MB';
                                 if (appList.includes(app.name)) {
-                                    $('.gpu-active-apps td span[data-name="' + app.name + '"] img', panel).attr('title', title);
+                                    $('.gpu-active-apps span[data-name="' + app.name + '"] img', panel).attr('title', title);
                                 } else {
                                     const img = $('<img class="gpu-image" src="/plugins/gpustat/images/' + app.name + '.png" title="' + title + '">');
                                     const span = $('<span class="gpu-img-span" data-name="' + app.name + '"></span>');
@@ -72,7 +75,7 @@ const parseStats = (data2) => {
                                     $('.gpu-active-apps td', panel).append(span);
                                 }
                             });
-                            $('.gpu-active-apps td span.gpu-img-span', panel).each(function () {
+                            $('.gpu-active-apps .gpu-img-span', panel).each(function () {
                                 if (!active_apps.includes($(this).data('name')))
                                     $(this).remove();
                             });

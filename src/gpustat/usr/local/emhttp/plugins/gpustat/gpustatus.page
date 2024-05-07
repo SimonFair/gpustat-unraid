@@ -1,7 +1,6 @@
 Menu="Dashboard"
 Icon="gpustat.png"
 Cond="version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.12.0-beta6', '<')"
-Nchan="gpustat"
 ---
 <?php
     /*
@@ -343,13 +342,16 @@ Nchan="gpustat"
 </table>
 <?php endif; ?>
 <script type="text/javascript" src="/plugins/gpustat/scripts/gpustat.js"></script>
-
 <script type="text/javascript">
 $(gpustat_status);
-const gpustat_ws = new NchanSubscriber('/sub/gpustat');
-gpustat_ws.on('message', (data) => {
-    parseStats(JSON.parse(data));
-});
-gpustat_ws.start();
+if (<?=$gpustat_cfg['UIREFRESH'];?>) {
+    setInterval(gpustat_status, <?=max(abs($display['refresh']), $gpustat_cfg['UIREFRESHINT']);?>);
+}
+// Add Nchan="gpustat" to this .page header to enable Nchan
+// const gpustat_ws = new NchanSubscriber('/sub/gpustat');
+// gpustat_ws.on('message', (data) => {
+//     parseStats(JSON.parse(data));
+// });
+// gpustat_ws.start();
 $(gpustat_dash);
 </script>

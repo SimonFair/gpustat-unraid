@@ -75,10 +75,13 @@ const parseStats = (data) => {
 
         if (data["active_apps"]) {
             const appList = [];
-            $('.gpu-active-apps .gpu-img-span').each(function () {
-                appList.push($(this).data('name'));
-            });
             const active_apps = [];
+            $('.gpu-active-apps .gpu-img-span').each(function () {
+                const name = $(this).data('name');
+                if (!appList.includes(name)) {
+                    appList.push(name);
+                }
+            });
             data["active_apps"].forEach(function (app) {
                 active_apps.push(app.name);
                 const title = 'Count: ' + app.count + ' - Memory: ' + app.mem + 'MB';
@@ -91,9 +94,10 @@ const parseStats = (data) => {
                     $('.gpu-active-apps').append(span);
                 }
             });
-            $('.gpu-active-apps td span.gpu-img-span').each(function () {
-                if (!active_apps.includes($(this).data('name')))
+            $('.gpu-active-apps .gpu-img-span').each(function () {
+                if (!active_apps.includes($(this).data('name'))) {
                     $(this).remove();
+                }
             });
         }
 
@@ -101,6 +105,10 @@ const parseStats = (data) => {
             $('.gpu-'+key).html(data);
         })
     }
+};
+
+const gpustat_status = () => {
+    $.getJSON('/plugins/gpustat/gpustatus.php', (data) => parseStats(data));
 };
 
 const gpustat_dash = () => {
