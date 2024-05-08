@@ -42,7 +42,7 @@ class Nvidia extends Main
     const PCI_INVENTORY_PARAMm = " -Dmm | grep VGA";
     const STATISTICS_PARAM = '-q -x -g %s 2>&1';
     const SUPPORTED_APPS = [ // Order here is important because some apps use the same binaries -- order should be more specific to less
-        ['title' => 'Plex Media Server',    'name' => 'Plex-Media-Server',  'icon' => 'plex.png',        'commands' => ['Plex Transcoder']],
+        ['title' => 'Plex Media Server',    'name' => 'Plex-Media-Server',  'icon' => 'plex.png',        'commands' => ['Plex Media Server', 'Plex Transcoder']],
         ['title' => 'Jellyfin',             'name' => 'jellyfin',           'icon' => 'jellyfin.png',    'commands' => ['jellyfin-ffmpeg']],
         ['title' => 'HandBrake',            'name' => 'handbrake',          'icon' => 'handbrake.png',   'commands' => ['/usr/bin/HandBrakeCLI']],
         ['title' => 'Emby',                 'name' => 'emby',               'icon' => 'emby.png',        'commands' => ['emby']],
