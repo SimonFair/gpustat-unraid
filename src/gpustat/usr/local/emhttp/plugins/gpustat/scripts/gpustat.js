@@ -39,15 +39,28 @@ const gpustat_status = () => {
                         $('.gpu-'+metric+'bar').removeAttr('style').css('width', data[metric]);
                     });
 
-                    if (data["appssupp"]) {
-                        data["appssupp"].forEach(function (app) {
-                            if (data[app + "using"]) {
-                                $('.gpu-img-span-'+app).css('display', "inline");
-                                $('#gpu-'+app).attr('title', "Count: " + data[app+"count"] + " Memory: " + data[app+"mem"] + "MB");
+                    if (data["active_apps"]) {
+                        const appList = [];
+                        $('.gpu-active-apps .gpu-img-span').each(function () {
+                            appList.push($(this).data('name'));
+                        });
+                        const active_apps = [];
+                        data["active_apps"].forEach(function (app) {
+                            active_apps.push(app.name);
+                            if (appList.includes(app.name)) {
+                                const title = 'App: ' + app.title + ' - Count: ' + app.count + ' - Memory: ' + app.mem + 'MB';
+                                $('.gpu-active-apps td span[data-name="' + app.name + '"] img').attr('title', title);
                             } else {
-                                $('.gpu-img-span-'+app).css('display', "none");
-                                $('#gpu-'+app).attr('title', "");
+                                const title = 'App: ' + app.title + ' - Count: ' + app.count + ' - Memory: ' + app.mem + 'MB';
+                                const img = $('<img class="gpu-image" src="' + app.icon + '" title="' + title + '">');
+                                const span = $('<span class="gpu-img-span" data-name="' + app.name + '"></span>');
+                                span.append(img);
+                                $('.gpu-active-apps td').append(span);
                             }
+                        });
+                        $('.gpu-active-apps td span.gpu-img-span').each(function () {
+                            if (!active_apps.includes($(this).data('name')))
+                                $(this).remove();
                         });
                     }
                     break;
