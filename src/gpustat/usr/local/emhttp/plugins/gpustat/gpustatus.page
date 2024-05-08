@@ -54,7 +54,7 @@ Cond="version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.12.0-b
 
 <table id='db-box1' class='dash_gpustat dashboard box1' style='display:none'>
     <thead sort='953'><tr class='hidden'><td></td><td colspan='3'></td><td></td></tr></thead>
-    <tbody sort='953' class='sortable'>
+    <tbody sort='953' class='gpustat sortable'>
         <tr>
             <td></td>
             <td class='next' colspan='3'>
