@@ -31,6 +31,10 @@
     display: inline-block;
 }
 
+.gpustat span[class*="gpu-throttled"] {
+    margin-right: 5px;
+}
+
 .gpustat .gpu-image {
     padding-left: 8px;
     height: 32px;
