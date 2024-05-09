@@ -313,7 +313,7 @@ $gpu_nv = $gpu_intel = $gpu_amd = $gpu_unknown = false;
             }
             if($gpustat_cfg['DISPPRIMASSEM']) {
                 $page_render .= "<span class='w26'><span class='gpu-primassem$count load'></span><div class='usage-disk sys'>" ;
-                $page_render .= "<span class='gpu-primassembar'$count' id='gpu-primassembar$count'></span><span></span></div></span>" ;
+                $page_render .= "<span class='gpu-primassembar$count' id='gpu-primassembar$count'></span><span></span></div></span>" ;
             }
             $page_render .= "</td></tr>" ;
         }
