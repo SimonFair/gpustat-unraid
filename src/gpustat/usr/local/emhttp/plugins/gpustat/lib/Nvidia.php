@@ -134,7 +134,11 @@ class Nvidia extends Main
                 $appInfo = $this->getDockerContainerInspect($matches[1]);
             } else if ($controlGroup && preg_match('/\/lxc.payload\.([\w\.]+)/i', $controlGroup, $matches)) { // If running in a LXC and not detected before
                 $containerType = 'LXC';
-                $appInfo = $this->getLxcDistributionName($matches[1]);
+                $appInfo = [
+                    'name' => $matches[1],
+                    'title' => $matches[1],
+                    'icon' => $this->getLxcDistributionIcon($matches[1]),
+                ];
             }
         }
 

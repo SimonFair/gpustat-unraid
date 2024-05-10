@@ -248,10 +248,10 @@ class Main
     /**
      * Retrieves LXC distribution name for a given container NAME
      *
-     * @param string $name
-     * @return array
+     * @param string $containerName
+     * @return string
      */
-    protected function getLxcDistributionName(string $name): array
+    protected function getLxcDistributionName(string $containerName): string
     {
         $this->runCommand(self::LXC_PATH);
         $lxcCachePath = trim($this->stdout);
@@ -259,39 +259,50 @@ class Main
         if (!$lxcCachePath)
             return [];
 
-        $lxcConfigPath = $lxcCachePath . '/' . $name . '/config';
+        $lxcConfigPath = $lxcCachePath . '/' . $containerName . '/config';
 
         if (!file_exists($lxcConfigPath))
             return [];
 
         $this->runCommand(sprintf(self::LXC_DISTRIBUTION, $lxcConfigPath), '', false);
-        $distribution = trim($this->stdout);
+        $distributionName = trim($this->stdout);
 
-        if (!$distribution)
+        if (!$distributionName)
             return [];
 
-        return [
-            'name' => $name,
-            'title' => $name,
-            'icon' => $this->getLxcDistributionIcon($distribution),
-        ];
+        return $distributionName;
     }
 
     /**
-     * Retrieves lxc distribution icon for a given distribution NAME
+     * Retrieves lxc icon for a given container NAME
      *
-     * @param string $distributionName
+     * @param string $containerName
      * @return string
      */
-    protected function getLxcDistributionIcon(string $distributionName): string
+    protected function getLxcDistributionIcon(string $containerName): string
     {
-        $iconName = 'question';
+        $this->runCommand(self::LXC_PATH);
+        $lxcCachePath = trim($this->stdout);
+        $iconPath = '/plugins/lxc/images/distributions/question.png';
+        $distributionName = '';
 
-        if (file_exists('/usr/local/emhttp/plugins/lxc/images/distributions/' . $distributionName . '.png')) {
-            $iconName = $distributionName;
+        if (!$lxcCachePath || !is_dir($lxcCachePath))
+            return $iconPath;
+
+        # Check for custom icon
+        if (file_exists($lxcCachePath . '/custom-icons/' . $containerName . '.png')) {
+            $iconPath = '/mnt/cache/lxc/custom-icons/' . $containerName . '.png';
+        # Or get distribution name
+        } else {
+            $distributionName = $this->getLxcDistributionName($containerName);
         }
 
-        return '/plugins/lxc/images/distributions/' . $iconName . '.png';
+        # Get distribution icon
+        if ($distributionName && file_exists('/usr/local/emhttp/plugins/lxc/images/distributions/' . $distributionName . '.png')) {
+            $iconPath = '/plugins/lxc/images/distributions/' . $distributionName . '.png';
+        }
+
+        return $iconPath;
     }
 
     /**
