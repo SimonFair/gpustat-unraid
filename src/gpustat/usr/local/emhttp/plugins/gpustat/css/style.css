@@ -26,13 +26,22 @@
     margin-top: 0;
 }
 
-span.gpu {
+.gpustat .gpu {
     width: 150px;
     display: inline-block;
 }
 
-.gpu-image {
+.gpustat span[class*="gpu-throttled"] {
+    margin-right: 5px;
+}
+
+.gpustat .gpu-image {
     padding-left: 8px;
+    margin-bottom: 8px;
     height: 32px;
     width: 32px;
+}
+
+.gpustat .usage-disk > span {
+    transition: width 0.5s;
 }

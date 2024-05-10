@@ -37,7 +37,10 @@ class Main
 {
     const PLUGIN_NAME = 'gpustat';
     const COMMAND_EXISTS_CHECKER = 'which';
+    const PS_CGROUP = "ps wwh -o 'cgroup' p";
     const DOCKER_INSPECT = 'docker container inspect';
+    const LXC_PATH = "lxc-config lxc.lxcpath";
+    const LXC_DISTRIBUTION = "grep -oP '(?<=dist )\w+' %s | head -1 | sed 's/\"//g'";
     const DOCKER_ICON_DEFAULT_PATH = '/plugins/dynamix.docker.manager/images/question.png';
     const DOCKER_ICON_PATH = '/var/local/emhttp/plugins/dynamix.docker.manager/docker.json';
 
@@ -190,19 +193,14 @@ class Main
     /**
      * Retrieves the control group for a given process ID
      *
-     * @param int $pid
+     * @param string $pid
      * @return string
      */
-    protected function getControlGroup(int $pid): string
+    protected function getControlGroup(string $pid): string
     {
-        $cgroup = '';
-        $file = sprintf('/proc/%0d/cgroup', $pid);
+        $this->runCommand(self::PS_CGROUP, $pid);
 
-        if (file_exists($file)) {
-            $cgroup = trim(@file_get_contents($file), "\0");
-        }
-
-        return $cgroup;
+        return trim($this->stdout);
     }
 
     /**
@@ -248,6 +246,55 @@ class Main
     }
 
     /**
+     * Retrieves LXC distribution name for a given container NAME
+     *
+     * @param string $name
+     * @return array
+     */
+    protected function getLxcDistributionName(string $name): array
+    {
+        $this->runCommand(self::LXC_PATH);
+        $lxcCachePath = trim($this->stdout);
+
+        if (!$lxcCachePath)
+            return [];
+
+        $lxcConfigPath = $lxcCachePath . '/' . $name . '/config';
+
+        if (!file_exists($lxcConfigPath))
+            return [];
+
+        $this->runCommand(sprintf(self::LXC_DISTRIBUTION, $lxcConfigPath), '', false);
+        $distribution = trim($this->stdout);
+
+        if (!$distribution)
+            return [];
+
+        return [
+            'name' => $name,
+            'title' => $name,
+            'icon' => $this->getLxcDistributionIcon($distribution),
+        ];
+    }
+
+    /**
+     * Retrieves lxc distribution icon for a given distribution NAME
+     *
+     * @param string $distributionName
+     * @return string
+     */
+    protected function getLxcDistributionIcon(string $distributionName): string
+    {
+        $iconName = 'question';
+
+        if (file_exists('/usr/local/emhttp/plugins/lxc/images/distributions/' . $distributionName . '.png')) {
+            $iconName = $distributionName;
+        }
+
+        return '/plugins/lxc/images/distributions/' . $iconName . '.png';
+    }
+
+    /**
      * Retrieves plugin settings and returns them or defaults if no file
      *
      * @return mixed
@@ -289,7 +336,7 @@ class Main
     protected static function convertCelsius(int $temp = 0): float
     {
         $fahrenheit = $temp*(9/5)+32;
-        
+
         return round($fahrenheit, -1);
     }
 

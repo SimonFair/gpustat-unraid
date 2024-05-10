@@ -41,26 +41,33 @@ const gpustat_status = () => {
 
                     if (data["active_apps"]) {
                         const appList = [];
-                        $('.gpu-active-apps .gpu-img-span').each(function () {
-                            appList.push($(this).data('name'));
-                        });
                         const active_apps = [];
+                        $('.gpu-active-apps .gpu-img-span').each(function () {
+                            const name = $(this).data('name');
+                            if (!appList.includes(name)) {
+                                appList.push(name);
+                            }
+                        });
                         data["active_apps"].forEach(function (app) {
                             active_apps.push(app.name);
+                            let processList = '';
+                            if (app.type == 'LXC' && app.process.length) {
+                                processList = ' (' + app.process.join(', ') + ')';
+                            }
+                            const title = app.title + ' - Count: ' + app.count + processList + ' - Memory: ' + app.mem + 'MB';
                             if (appList.includes(app.name)) {
-                                const title = 'App: ' + app.title + ' - Count: ' + app.count + ' - Memory: ' + app.mem + 'MB';
                                 $('.gpu-active-apps td span[data-name="' + app.name + '"] img').attr('title', title);
                             } else {
-                                const title = 'App: ' + app.title + ' - Count: ' + app.count + ' - Memory: ' + app.mem + 'MB';
                                 const img = $('<img class="gpu-image" src="' + app.icon + '" title="' + title + '">');
                                 const span = $('<span class="gpu-img-span" data-name="' + app.name + '"></span>');
                                 span.append(img);
                                 $('.gpu-active-apps td').append(span);
                             }
                         });
-                        $('.gpu-active-apps td span.gpu-img-span').each(function () {
-                            if (!active_apps.includes($(this).data('name')))
+                        $('.gpu-active-apps .gpu-img-span').each(function () {
+                            if (!active_apps.includes($(this).data('name'))) {
                                 $(this).remove();
+                            }
                         });
                     }
                     break;
