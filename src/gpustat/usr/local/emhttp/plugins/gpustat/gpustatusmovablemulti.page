@@ -98,6 +98,7 @@ foreach ($multigpus as $id=>$gpu) {
     $layout
     <tr class="vfio_inuse" hidden><td><span></span></td></tr>
     <tr class="vfio_inuse" hidden><td><span class="vfio_status">_(GPU not available bound to VFIO or inuse in a VM.)_</span></td></tr>
+    <tr><td style="padding: 0 0 17px 0;"></td></tr>
     </tbody>
     EOT;
     $i++ ; #GPU Number
