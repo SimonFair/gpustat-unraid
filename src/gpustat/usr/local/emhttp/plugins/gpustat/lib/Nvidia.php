@@ -39,33 +39,27 @@ class Nvidia extends Main
     const INVENTORY_PARM_PCI = "-q -x -g %s 2>&1 | grep 'gpu id'";
     const INVENTORY_REGEX = '/GPU\s(?P<id>\d):\s(?P<model>.*)\s\(UUID:\s(?P<guid>GPU-[0-9a-f-]+)\)/i';
     const PCI_INVENTORY_UTILITY = 'lspci';
-    const PCI_INVENTORY_PARAM = '| grep VGA';
     const PCI_INVENTORY_PARAMm = " -Dmm | grep VGA";
-    const PCD_INVENTORY_REGEX =
-        '/^(?P<busid>[0-9a-f]{2}).*\[AMD(\/ATI)?\]\s+(?P<model>.+)\s+(\[(?P<product>.+)\]|\()/imU';
-
     const STATISTICS_PARAM = '-q -x -g %s 2>&1';
     const SUPPORTED_APPS = [ // Order here is important because some apps use the same binaries -- order should be more specific to less
-        'plex'        => ['Plex Transcoder'],
-        'jellyfin'    => ['jellyfin-ffmpeg'],
-        'handbrake'   => ['/usr/bin/HandBrakeCLI'],
-        'emby'        => ['emby'],
-        'tdarr'       => ['ffmpeg', 'HandbrakeCLI'],
-        'unmanic'     => ['ffmpeg'],
-        'dizquetv'    => ['ffmpeg'],
-        'ersatztv'    => ['ffmpeg'],
-        'fileflows'   => ['ffmpeg'],
-        'frigate'     => ['ffmpeg'],
-        'Threadfin'   => ['ffmpeg'],
-        'codeproject' => ['python3.8'],
-        'deepstack'   => ['python3'],
-        'nsfminer'    => ['nsfminer'],
-        'shinobipro'  => ['shinobi'],
-        'foldinghome' => ['FahCore'],
-        'compreface'  => ['uwsgi'],
+        ['title' => 'Plex Media Server',    'name' => 'Plex-Media-Server',  'icon' => 'plex.png',        'commands' => ['Plex Media Server', 'Plex Transcoder']],
+        ['title' => 'Jellyfin',             'name' => 'jellyfin',           'icon' => 'jellyfin.png',    'commands' => ['jellyfin-ffmpeg']],
+        ['title' => 'HandBrake',            'name' => 'handbrake',          'icon' => 'handbrake.png',   'commands' => ['/usr/bin/HandBrakeCLI']],
+        ['title' => 'Emby',                 'name' => 'emby',               'icon' => 'emby.png',        'commands' => ['emby']],
+        ['title' => 'Tdarr',                'name' => 'tdarr',              'icon' => 'tdarr.png',       'commands' => ['ffmpeg', 'HandbrakeCLI']],
+        ['title' => 'Unmanic',              'name' => 'unmanic',            'icon' => 'unmanic.png',     'commands' => ['ffmpeg']],
+        ['title' => 'dizqueTV',             'name' => 'dizquetv',           'icon' => 'dizquetv.png',    'commands' => ['ffmpeg']],
+        ['title' => 'ErsatzTV',             'name' => 'ersatztv',           'icon' => 'ersatztv.png',    'commands' => ['ffmpeg']],
+        ['title' => 'FileFlows',            'name' => 'fileflows',          'icon' => 'fileflows.png',   'commands' => ['ffmpeg']],
+        ['title' => 'Frigate',              'name' => 'frigate',            'icon' => 'frigate.png',     'commands' => ['ffmpeg']],
+        ['title' => 'Threadfin',            'name' => 'Threadfin',          'icon' => 'Threadfin.png',   'commands' => ['ffmpeg']],
+        ['title' => 'CodeProject',          'name' => 'codeproject',        'icon' => 'codeproject.png', 'commands' => ['python3.8']],
+        ['title' => 'DeepStack',            'name' => 'deepstack',          'icon' => 'deepstack.png',   'commands' => ['python3']],
+        ['title' => 'NSFMiner',             'name' => 'nsfminer',           'icon' => 'nsfminer.png',    'commands' => ['nsfminer']],
+        ['title' => 'Shinobi Pro',          'name' => 'shinobipro',         'icon' => 'shinobipro.png',  'commands' => ['shinobi']],
+        ['title' => 'Folding@home',         'name' => 'foldinghome',        'icon' => 'foldinghome.png', 'commands' => ['FahCore']],
+        ['title' => 'CompreFace',           'name' => 'compreface',         'icon' => 'compreface.png',  'commands' => ['uwsgi']],
     ];
-
-
 
     /**
      * Nvidia constructor.
@@ -78,19 +72,25 @@ class Nvidia extends Main
     }
 
     /**
-     * Iterates supported applications and their respective commands to match against processes using GPU hardware
+     * Retrieve application data from processes using GPU hardware
      *
      * @param SimpleXMLElement $process
      */
-    private function detectApplication (SimpleXMLElement $process)
+    private function detectApplication(SimpleXMLElement $process)
     {
-        foreach (self::SUPPORTED_APPS as $app => $commands) {
-            foreach ($commands as $command) {
+        $appInfo = null;
+        $usedMemory = (int) $this->stripText(' MiB', $process->used_memory);
+        $containerType = 'App';
+
+        // If app found in supported apps
+        foreach (self::SUPPORTED_APPS as $app) {
+            foreach ($app['commands'] as $command) {
                 if (strpos($process->process_name, $command) !== false) {
                     // For Handbrake/ffmpeg: arguments tell us which application called it
-                    if (in_array($command, ['ffmpeg', 'HandbrakeCLI', 'python3.8','python3'])) {
+                    if (in_array($command, ['ffmpeg', 'HandbrakeCLI', 'python3.8', 'python3'])) {
                         if (isset($process->pid)) {
                             $pid_info = $this->getFullCommand((int) $process->pid);
+
                             if (!empty($pid_info) && strlen($pid_info) > 0) {
                                 if ($command === 'python3.8') {
                                     // CodeProject doesn't have any signifier in the full command output
@@ -102,10 +102,10 @@ class Nvidia extends Main
                                     if (strpos($pid_info, '/app/intelligencelayer/shared') === false) {
                                         continue 2;
                                     }
-                                } elseif (stripos($pid_info, strtolower($app)) === false) {
+                                } elseif (stripos($pid_info, strtolower($app['name'])) === false) {
                                     // Try to match the app name in the parent process
                                     $ppid_info = $this->getParentCommand((int) $process->pid);
-                                    if (stripos($ppid_info, $app) === false) {
+                                    if (stripos($ppid_info, $app['name']) === false) {
                                         // We didn't match the application name in the arguments, no match
                                         continue 2;
                                     }
@@ -113,12 +113,71 @@ class Nvidia extends Main
                             }
                         }
                     }
-                    $this->pageData[$app . 'using'] = true;
-                    $this->pageData[$app . 'mem'] += (int)$this->stripText(' MiB', $process->used_memory);
-                    $this->pageData[$app . 'count']++;
-                    // If we match a more specific command/app to a process, continue on to the next process
+
+                    $appInfo = [
+                        'name' => $app['name'],
+                        'title' => $app['title'],
+                        'icon' => '/plugins/gpustat/images/' . $app['icon'],
+                    ];
+
                     break 2;
                 }
+            }
+        }
+
+        // If not found in supported apps, try to find in docker and LXC
+        if (!$appInfo) {
+            $controlGroup = $this->getControlGroup((string) $process->pid);
+
+            // If docker app using GPU
+            if ($controlGroup && preg_match('/docker\/([a-z0-9]+)$/', $controlGroup, $matches)) {
+                $appInfo = $this->getDockerContainerInspect($matches[1]);
+            } else if ($controlGroup && preg_match('/\/lxc.payload\.([\w\.]+)/i', $controlGroup, $matches)) { // If running in a LXC and not detected before
+                $containerType = 'LXC';
+                $appInfo = [
+                    'name' => $matches[1],
+                    'title' => $matches[1],
+                    'icon' => $this->getLxcDistributionIcon($matches[1]),
+                ];
+            }
+        }
+
+        if ($appInfo) {
+            $active_app = [
+                'type' => $containerType,
+                'name' => $appInfo['name'],
+                'title' => $appInfo['title'],
+                'icon' => $appInfo['icon'],
+                'mem' => $usedMemory,
+                'count' => 1,
+            ];
+
+            // Will display process in dashboard
+            if ($containerType == 'LXC') {
+                $active_app['process'] = [basename((string) $process->process_name)];
+            }
+        } else {
+            // If process not detected, display process name
+            $active_app = [
+                'type' => $containerType,
+                'name' => (string) $process->process_name,
+                'title' => (string) $process->process_name,
+                'icon' => self::DOCKER_ICON_DEFAULT_PATH,
+                'mem' => $usedMemory,
+                'count' => 1,
+            ];
+        }
+
+        $indexApp = array_search($active_app['name'], array_column($this->pageData['active_apps'], 'name'));
+
+        if ($indexApp === false) {
+            $this->pageData['active_apps'][] = $active_app;
+        } else {
+            $this->pageData['active_apps'][$indexApp]['mem'] += $usedMemory;
+            $this->pageData['active_apps'][$indexApp]['count']++;
+
+            if ($containerType == 'LXC' && !in_array(basename((string) $process->process_name), $this->pageData['active_apps'][$indexApp]['process'])) {
+                $this->pageData['active_apps'][$indexApp]['process'][] = basename((string) $process->process_name);
             }
         }
     }
@@ -197,11 +256,11 @@ class Nvidia extends Main
             }
             foreach($result as $gpu) {
                 $cmd =self::CMD_UTILITY . ES . sprintf(self::INVENTORY_PARM_PCI, $gpu['guid']) ;
-                $cmdres = $this->stdout = shell_exec($cmd); 
+                $cmdres = $this->stdout = shell_exec($cmd);
                 $pci = substr($cmdres,14,12);
                 $gpu['id'] = substr($pci,5) ;
                 $gpu['vendor'] = 'nvidia' ;
-                $result2[$pci] = $gpu ; 
+                $result2[$pci] = $gpu ;
             }
             if (empty($result)) $result2=$this->getPCIInventory() ;
         }
@@ -263,7 +322,7 @@ class Nvidia extends Main
         if (strlen($name) > 20 && str_word_count($name) > 2) {
             $words = explode(" ", $name);
             if ($words[0] == "GeForce")  {
-                array_shift($words) ;  
+                array_shift($words) ;
                 $words2 = implode(" ", $words) ;
                 if (strlen($words2) <= 20) $this->pageData['name'] = $words2;
                 } else  $this->pageData['name'] = sprintf("%0s %1s", $words[0], $words[1]);
@@ -360,7 +419,7 @@ class Nvidia extends Main
                 if (!empty($this->stdout) && strlen($this->stdout) > 0) {
                     $this->parseStatistics();
                 } else {
-                    
+
                     $this->pageData['error'][] = Error::get(Error::VENDOR_DATA_NOT_RETURNED);
                 }
             } else {
@@ -377,7 +436,7 @@ class Nvidia extends Main
             $this->pageData["vfio"] = false ;
             $this->pageData["vfiochk"] = $this->checkVFIO("0000:".$this->settings['PCIID']) ;
             $this->pageData["vfiochkid"] = "0000:".$this->settings['PCIID'] ;
-            
+
         } else {
             $this->pageData["vfio"] = true ;
             $this->pageData["vendor"] = "Nvidia" ;
@@ -454,12 +513,7 @@ class Nvidia extends Main
                 'uuid'          => 'N/A',
             ];
 
-            // Set App HW Usage Defaults
-            foreach (self::SUPPORTED_APPS AS $app => $process) {
-                $this->pageData[$app . "using"] = false;
-                $this->pageData[$app . "mem"] = 0;
-                $this->pageData[$app . "count"] = 0;
-            }
+            $this->pageData['active_apps'] = [];
             if (isset($data->product_name)) {
                 $this->getProductName($data->product_name);
             }
@@ -484,7 +538,6 @@ class Nvidia extends Main
             }
             // For some reason, encoder_sessions->session_count is not reliable on my install, better to count processes
             if ($this->settings['DISPSESSIONS']) {
-                $this->pageData['appssupp'] = array_keys(self::SUPPORTED_APPS);
                 if (isset($data->processes->process_info)) {
                     $this->pageData['sessions'] = count($data->processes->process_info);
                     if ($this->pageData['sessions'] > 0) {

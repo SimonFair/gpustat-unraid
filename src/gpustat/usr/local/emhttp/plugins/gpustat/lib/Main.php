@@ -37,6 +37,12 @@ class Main
 {
     const PLUGIN_NAME = 'gpustat';
     const COMMAND_EXISTS_CHECKER = 'which';
+    const PS_CGROUP = "ps wwh -o 'cgroup' p";
+    const DOCKER_INSPECT = 'docker container inspect';
+    const LXC_PATH = "lxc-config lxc.lxcpath";
+    const LXC_DISTRIBUTION = "grep -oP '(?<=dist )\w+' %s | head -1 | sed 's/\"//g'";
+    const DOCKER_ICON_DEFAULT_PATH = '/plugins/dynamix.docker.manager/images/question.png';
+    const DOCKER_ICON_PATH = '/var/local/emhttp/plugins/dynamix.docker.manager/docker.json';
 
     /**
      * @var array
@@ -185,6 +191,121 @@ class Main
     }
 
     /**
+     * Retrieves the control group for a given process ID
+     *
+     * @param string $pid
+     * @return string
+     */
+    protected function getControlGroup(string $pid): string
+    {
+        $this->runCommand(self::PS_CGROUP, $pid);
+
+        return trim($this->stdout);
+    }
+
+    /**
+     * Retrieves docker container info for a given docker ID
+     *
+     * @param string $id
+     * @return array
+     */
+    protected function getDockerContainerInspect(string $id): array
+    {
+        $this->runCommand(self::DOCKER_INSPECT, $id);
+
+        $json = json_decode($this->stdout);
+        if (!$json || !isset($json[0]->Config->Labels)) {
+            return [];
+        }
+
+        $docker_name = $json[0]->Name;
+        $docker_name = preg_replace('/^\//', '', $docker_name);
+
+        return [
+            'name' => $docker_name,
+            'title' => $json[0]->Config->Labels->{"org.opencontainers.image.title"} ?: $docker_name,
+            'icon' => $this->getDockerContainerIcon($docker_name),
+        ];
+    }
+
+    /**
+     * Retrieves docker container icon for a given docker NAME
+     *
+     * @param string $name
+     * @return string
+     */
+    protected function getDockerContainerIcon(string $name): string
+    {
+        if (!file_exists(self::DOCKER_ICON_PATH)) {
+            return self::DOCKER_ICON_DEFAULT_PATH;
+        }
+
+        $json = json_decode(file_get_contents(self::DOCKER_ICON_PATH));
+
+        return $json->$name->icon ?: self::DOCKER_ICON_DEFAULT_PATH;
+    }
+
+    /**
+     * Retrieves LXC distribution name for a given container NAME
+     *
+     * @param string $containerName
+     * @return string
+     */
+    protected function getLxcDistributionName(string $containerName): string
+    {
+        $this->runCommand(self::LXC_PATH);
+        $lxcCachePath = trim($this->stdout);
+
+        if (!$lxcCachePath)
+            return [];
+
+        $lxcConfigPath = $lxcCachePath . '/' . $containerName . '/config';
+
+        if (!file_exists($lxcConfigPath))
+            return [];
+
+        $this->runCommand(sprintf(self::LXC_DISTRIBUTION, $lxcConfigPath), '', false);
+        $distributionName = trim($this->stdout);
+
+        if (!$distributionName)
+            return [];
+
+        return $distributionName;
+    }
+
+    /**
+     * Retrieves lxc icon for a given container NAME
+     *
+     * @param string $containerName
+     * @return string
+     */
+    protected function getLxcDistributionIcon(string $containerName): string
+    {
+        $this->runCommand(self::LXC_PATH);
+        $lxcCachePath = trim($this->stdout);
+        $iconPath = '/plugins/lxc/images/distributions/question.png';
+        $distributionName = '';
+
+        if (!$lxcCachePath || !is_dir($lxcCachePath))
+            return $iconPath;
+
+        # Check for custom icon
+        if (file_exists($lxcCachePath . '/custom-icons/' . $containerName . '.png')) {
+            $iconPath = '/mnt/cache/lxc/custom-icons/' . $containerName . '.png';
+        # Or get distribution name
+        } else {
+            $distributionName = $this->getLxcDistributionName($containerName);
+        }
+
+        # Get distribution icon
+        if ($distributionName && file_exists('/usr/local/emhttp/plugins/lxc/images/distributions/' . $distributionName . '.png')) {
+            $iconPath = '/plugins/lxc/images/distributions/' . $distributionName . '.png';
+        }
+
+        return $iconPath;
+    }
+
+    /**
      * Retrieves plugin settings and returns them or defaults if no file
      *
      * @return mixed
@@ -226,7 +347,7 @@ class Main
     protected static function convertCelsius(int $temp = 0): float
     {
         $fahrenheit = $temp*(9/5)+32;
-        
+
         return round($fahrenheit, -1);
     }
 

@@ -55,14 +55,34 @@ const gpustat_statusm = (input) => {
                             $('.gpu-'+metric+'bar'+panel).removeAttr('style').css('width', data[metric]);
                         });
 
-                        if (data["appssupp"]) {
-                            data["appssupp"].forEach(function (app) {
-                                if (data[app + "using"]) {
-                                    $('.gpu-img-span-'+app+panel).css('display', "inline");
-                                    $('#gpu-'+app+panel).attr('title', "Count: " + data[app+"count"] + " Memory: " + data[app+"mem"] + "MB");
+                        if (data["active_apps"]) {
+                            const appList = [];
+                            const active_apps = [];
+                            $('.gpu-active-apps' + panel + ' .gpu-img-span').each(function () {
+                                const name = $(this).data('name');
+                                if (!appList.includes(name)) {
+                                    appList.push(name);
+                                }
+                            });
+                            data["active_apps"].forEach(function (app) {
+                                active_apps.push(app.name);
+                                let processList = '';
+                                if (app.type == 'LXC' && app.process.length) {
+                                    processList = ' (' + app.process.join(', ') + ')';
+                                }
+                                const title = app.title + ' - Count: ' + app.count + processList + ' - Memory: ' + app.mem + 'MB';
+                                if (appList.includes(app.name)) {
+                                    $('.gpu-active-apps' + panel + ' span[data-name="' + app.name + '"] img').attr('title', title);
                                 } else {
-                                    $('.gpu-img-span-'+app+panel).css('display', "none");
-                                    $('#gpu-'+app+panel).attr('title', "");
+                                    const img = $('<img class="gpu-image" src="' + app.icon + '" title="' + title + '">');
+                                    const span = $('<span class="gpu-img-span" data-name="' + app.name + '"></span>');
+                                    span.append(img);
+                                    $('.gpu-active-apps' + panel + ' td').append(span);
+                                }
+                            });
+                            $('.gpu-active-apps' + panel + ' .gpu-img-span').each(function () {
+                                if (!active_apps.includes($(this).data('name'))) {
+                                    $(this).remove();
                                 }
                             });
                         }
@@ -108,13 +128,13 @@ const gpustat_statusm = (input) => {
             var hidden = $.cookie('hidden_content');
             if (hidden) {
                 hidden = hidden.split(';');
-                if (hidden.includes($("#tblGPUDash" + panel).attr('title').md5())) 
+                if (hidden.includes($("#tblGPUDash" + panel).attr('title').md5()))
                 $("#tblGPUDash" + panel ).mixedView(0);
             }
-   
+
             })
          }
-   
+
 
     });
 };
