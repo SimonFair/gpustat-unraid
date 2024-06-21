@@ -269,7 +269,9 @@ class AMD extends Main
                 $fields = explode(" ", $metric);
                 if (isset(self::STATISTICS_KEYMAP[$fields[0]])) {
                     $values = self::STATISTICS_KEYMAP[$fields[0]];
-                    if ($this->settings['DISP' . strtoupper($values[0])] || $this->settings['DISP' . strtoupper($values[2])]) {
+                    if (array_key_exists('DISP' . strtoupper($values[0]),$this->settings)) $check1 = $this->settings['DISP' . strtoupper($values[0])];else $check1 = false;
+                    if (array_key_exists(2,$values)) $check2 = $this->settings['DISP' . strtoupper($values[2])]; else $check2 = false;
+                    if ($check1 || $check2) {
                         $this->pageData[$values[0]] = $this->roundFloat($this->stripText('%', $fields[1]), 1) . '%';
                         if (isset($fields[2])) {
                             $this->pageData[$values[1]] = $this->roundFloat(
