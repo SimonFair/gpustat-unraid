@@ -63,6 +63,7 @@ class Nvidia extends Main
         'shinobipro'  => ['shinobi'],
         'foldinghome' => ['FahCore'],
         'compreface'  => ['uwsgi'],
+        'immich'     => ['/config/machine-learning/cuda'],
     ];
 
 
