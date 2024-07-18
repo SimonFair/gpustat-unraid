@@ -88,7 +88,7 @@ class Nvidia extends Main
             foreach ($commands as $command) {
                 if (strpos($process->process_name, $command) !== false) {
                     // For Handbrake/ffmpeg: arguments tell us which application called it
-                    if (in_array($command, ['ffmpeg', 'HandbrakeCLI', 'python3.8','python3'])) {
+                    if (in_array($command, ['ffmpeg', 'HandbrakeCLI', 'python3.8', 'python3'])) {
                         if (isset($process->pid)) {
                             $pid_info = $this->getFullCommand((int) $process->pid);
                             if (!empty($pid_info) && strlen($pid_info) > 0) {
@@ -113,9 +113,19 @@ class Nvidia extends Main
                             }
                         }
                     }
-                    $this->pageData[$app . 'using'] = true;
-                    $this->pageData[$app . 'mem'] += (int)$this->stripText(' MiB', $process->used_memory);
-                    $this->pageData[$app . 'count']++;
+
+                    $usedMemory = (int) $this->stripText(' MiB', $process->used_memory);
+                    $index = array_search($app, array_column($this->pageData['active_apps'], 'name'));
+                    if ($index === false) {
+                        $this->pageData['active_apps'][] = [
+                            'name' => $app,
+                            'mem' => $usedMemory,
+                            'count' => 1,
+                        ];
+                    } else {
+                        $this->pageData['active_apps'][$index]['mem'] += $usedMemory;
+                        $this->pageData['active_apps'][$index]['count']++;
+                    }
                     // If we match a more specific command/app to a process, continue on to the next process
                     break 2;
                 }
@@ -197,11 +207,11 @@ class Nvidia extends Main
             }
             foreach($result as $gpu) {
                 $cmd =self::CMD_UTILITY . ES . sprintf(self::INVENTORY_PARM_PCI, $gpu['guid']) ;
-                $cmdres = $this->stdout = shell_exec($cmd); 
+                $cmdres = $this->stdout = shell_exec($cmd);
                 $pci = substr($cmdres,14,12);
                 $gpu['id'] = substr($pci,5) ;
                 $gpu['vendor'] = 'nvidia' ;
-                $result2[$pci] = $gpu ; 
+                $result2[$pci] = $gpu ;
             }
             if (empty($result)) $result2=$this->getPCIInventory() ;
         }
@@ -263,7 +273,7 @@ class Nvidia extends Main
         if (strlen($name) > 20 && str_word_count($name) > 2) {
             $words = explode(" ", $name);
             if ($words[0] == "GeForce")  {
-                array_shift($words) ;  
+                array_shift($words) ;
                 $words2 = implode(" ", $words) ;
                 if (strlen($words2) <= 20) $this->pageData['name'] = $words2;
                 } else  $this->pageData['name'] = sprintf("%0s %1s", $words[0], $words[1]);
@@ -360,7 +370,7 @@ class Nvidia extends Main
                 if (!empty($this->stdout) && strlen($this->stdout) > 0) {
                     $this->parseStatistics();
                 } else {
-                    
+
                     $this->pageData['error'][] = Error::get(Error::VENDOR_DATA_NOT_RETURNED);
                 }
             } else {
@@ -377,7 +387,7 @@ class Nvidia extends Main
             $this->pageData["vfio"] = false ;
             $this->pageData["vfiochk"] = $this->checkVFIO("0000:".$this->settings['PCIID']) ;
             $this->pageData["vfiochkid"] = "0000:".$this->settings['PCIID'] ;
-            
+
         } else {
             $this->pageData["vfio"] = true ;
             $this->pageData["vendor"] = "Nvidia" ;
@@ -454,12 +464,7 @@ class Nvidia extends Main
                 'uuid'          => 'N/A',
             ];
 
-            // Set App HW Usage Defaults
-            foreach (self::SUPPORTED_APPS AS $app => $process) {
-                $this->pageData[$app . "using"] = false;
-                $this->pageData[$app . "mem"] = 0;
-                $this->pageData[$app . "count"] = 0;
-            }
+            $this->pageData['active_apps'] = [];
             if (isset($data->product_name)) {
                 $this->getProductName($data->product_name);
             }
@@ -484,7 +489,6 @@ class Nvidia extends Main
             }
             // For some reason, encoder_sessions->session_count is not reliable on my install, better to count processes
             if ($this->settings['DISPSESSIONS']) {
-                $this->pageData['appssupp'] = array_keys(self::SUPPORTED_APPS);
                 if (isset($data->processes->process_info)) {
                     $this->pageData['sessions'] = count($data->processes->process_info);
                     if ($this->pageData['sessions'] > 0) {

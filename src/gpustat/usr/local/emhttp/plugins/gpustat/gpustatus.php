@@ -38,35 +38,23 @@ use gpustat\lib\Nvidia;
 use gpustat\lib\Intel;
 use gpustat\lib\Error;
 
-if (!isset($gpustat_cfg)) {
-    $gpustat_cfg = Main::getSettings();
+$gpustat_cfg = Main::getSettings();
+
+switch ($gpustat_cfg['VENDOR']) {
+    case 'amd':
+        $json = (new AMD($gpustat_cfg))->getStatistics();
+        break;
+    case 'intel':
+        $json = (new Intel($gpustat_cfg))->getStatistics();
+        break;
+    case 'nvidia':
+        $json = (new Nvidia($gpustat_cfg))->getStatistics();
+        break;
+    default:
+        print_r(Error::get(Error::CONFIG_SETTINGS_NOT_VALID));
 }
 
-// $gpustat_inventory should be set if called from settings page code
-if (isset($gpustat_inventory) && $gpustat_inventory) {
-    $gpustat_cfg['inventory'] = true;
-    // Settings page looks for $gpustat_data specifically -- inventory all supported GPU types
-    $gpustat_data = array_merge((new Nvidia($gpustat_cfg))->getInventory(), (new Intel($gpustat_cfg))->getInventory(), (new AMD($gpustat_cfg))->getInventory());
-} else {
-
-    switch ($gpustat_cfg['VENDOR']) {
-        case 'amd':
-            $data = (new AMD($gpustat_cfg))->getStatistics();
-            break;
-        case 'intel':
-            $data = (new Intel($gpustat_cfg))->getStatistics();
-            break;
-        case 'nvidia':
-            $data = (new Nvidia($gpustat_cfg))->getStatistics();
-            break;
-        default:
-            print_r(Error::get(Error::CONFIG_SETTINGS_NOT_VALID));
-    }
-    $json = $data ;
-    header('Content-Type: application/json');
-    header('Content-Length:' . ES . strlen($json));
-    echo $json;
-    file_put_contents("/tmp/gpujson2","Time = ".date(DATE_RFC2822)."\n") ;
-    file_put_contents("/tmp/gpujson2",$json."\n",FILE_APPEND) ;
-
-}
+header('Content-Type: application/json');
+header('Content-Length:' . ES . strlen($json));
+echo $json;
+file_put_contents("/tmp/gpujson2", "Time = " . date(DATE_RFC2822) . PHP_EOL . $json . PHP_EOL);
