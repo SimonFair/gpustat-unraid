@@ -52,6 +52,53 @@ class Intel extends Main
         parent::__construct($settings);
     }
 
+        /**
+     * Iterates supported applications and their respective commands to match against processes using GPU hardware
+     *
+     * @param SimpleXMLElement $process
+     */
+    private function detectApplication (array $process)
+    {
+        foreach (self::SUPPORTED_APPS as $app => $commands) {
+            foreach ($commands as $command) {
+                if (strpos($process['name'], $command) !== false) {
+                    // For Handbrake/ffmpeg: arguments tell us which application called it
+                    if (in_array($command, ['ffmpeg', 'HandbrakeCLI', 'python3.8','python3'])) {
+                        if (isset($process['pid'])) {
+                            $pid_info = $this->getFullCommand((int) $process['pid']);
+                            if (!empty($pid_info) && strlen($pid_info) > 0) {
+                                if ($command === 'python3.8') {
+                                    // CodeProject doesn't have any signifier in the full command output
+                                    if (strpos($pid_info, '/ObjectDetectionYolo/detect_adapter.py') === false) {
+                                        continue 2;
+                                    }
+                                } elseif ($command === 'python3') {
+                                    // Deepstack doesn't have any signifier in the full command output
+                                    if (strpos($pid_info, '/app/intelligencelayer/shared') === false) {
+                                        continue 2;
+                                    }
+                                } elseif (stripos($pid_info, strtolower($app)) === false) {
+                                    // Try to match the app name in the parent process
+                                    $ppid_info = $this->getParentCommand((int) $process['pid']);
+                                    if (stripos($ppid_info, $app) === false) {
+                                        // We didn't match the application name in the arguments, no match
+                                        continue 2;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    $this->pageData[$app . 'using'] = true;
+                    #$this->pageData[$app . 'mem'] += (int)$this->stripText(' MiB', $process->used_memory);
+                    $this->pageData[$app . 'mem'] = 0;
+                    $this->pageData[$app . 'count']++;
+                    // If we match a more specific command/app to a process, continue on to the next process
+                    break 2;
+                }
+            }
+        }
+    }
+
     /**
      * Retrieves Intel inventory using lspci and returns an array
      *
@@ -101,7 +148,7 @@ class Intel extends Main
                 $this->settings['IGTTIMER'] = ".500 1.500";
                 $command = self::STATISTICS_WRAPPER . ES . $this->settings['IGTTIMER'] . ES . self::CMD_UTILITY;
                             //Command invokes radeontop in STDOUT mode with an update limit of half a second @ 120 samples per second
-                $this->runCommand($command, self::STATISTICS_PARAM. $this->settings['GPUID'].'" | awk \'/^{/ {block=""; start=1} start {block=block $0 "\n"} /}$/ {start=0; endBlock=block} END {print endBlock "}}"}\'', false);
+                $this->runCommand($command, self::STATISTICS_PARAM. $this->settings['GPUID'].'"', false); 
                 if (!empty($this->stdout) && strlen($this->stdout) > 0) {
                     $this->parseStatistics();
                 } else {
@@ -137,10 +184,17 @@ class Intel extends Main
     {
         // JSON output from intel_gpu_top with multiple array indexes isn't properly formatted
         $stdout = trim($this->stdout, '[]');
-        $stdout = "[" . str_replace('}{', '},{', str_replace(["\n","\t"], '', $stdout)) . "]";
+        $stdout = str_replace('}{', '},{', str_replace(["\n","\t"], '', $stdout));
 
         try {
-            $data = json_decode($stdout, true, 512, JSON_THROW_ON_ERROR);
+            // Split the string into two JSON objects
+            $splitJson = preg_split('/\}\s*,\s*\{/m', $stdout);
+                        
+            // Format the split parts correctly for JSON decoding
+            $splitJson[0] .= '}';
+            $splitJson[1] = '{' . $splitJson[1];
+
+            $data = json_decode($splitJson[1], true, 512, JSON_THROW_ON_ERROR);
         } catch (JsonException $e) {
             $data = [];
             $this->pageData['error'][] = Error::get(Error::VENDOR_DATA_BAD_PARSE, $e->getMessage());
@@ -151,9 +205,8 @@ class Intel extends Main
         if ($count < 1) {
             $this->pageData['error'][] = Error::get(Error::VENDOR_DATA_NOT_ENOUGH, "Count: $count");
         }
-
+        file_put_contents("/tmp/gpudata",json_encode($data));
         // intel_gpu_top will never show utilization counters on the first sample so we need the second position
-        $data = $data[0];
         unset($stdout, $this->stdout);
 
         if (!empty($data)) {
@@ -234,6 +287,20 @@ class Intel extends Main
             if ($this->settings['DISPINTERRUPT']) {
                 if (isset($data['interrupts']['count'])) {
                     $this->pageData['interrupts'] = (int) $this->roundFloat($data['interrupts']['count']);
+                }
+            }
+            if ($this->settings['DISPSESSIONS']) {
+                $this->pageData['appssupp'] = array_keys(self::SUPPORTED_APPS);
+
+                if (isset($data['clients']) && count($data['clients']) > 0) {
+                    $this->pageData['sessions'] = count($data['clients']);
+                    if ($this->pageData['sessions'] > 0) {
+                        foreach ($data['clients'] as $id => $process) {
+                            if (isset($process["name"])) {
+                                $this->detectApplication($process);
+                            }
+                        }
+                    }
                 }
             }
         } else {
