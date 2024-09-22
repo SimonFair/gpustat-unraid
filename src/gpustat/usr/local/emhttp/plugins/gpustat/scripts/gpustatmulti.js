@@ -73,6 +73,17 @@ const gpustat_statusm = (input) => {
                         intelbars.forEach(function (metric) {
                             $('.gpu-'+metric+'bar'+panel).removeAttr('style').css('width', data[metric]);
                         });
+                        if (data["appssupp"]) {
+                            data["appssupp"].forEach(function (app) {
+                                if (data[app + "using"]) {
+                                    $('.gpu-img-span-'+app+panel).css('display', "inline");
+                                    $('#gpu-'+app+panel).attr('title', "Count: " + data[app+"count"] + " Memory: " + data[app+"mem"] + "MB");
+                                } else {
+                                    $('.gpu-img-span-'+app+panel).css('display', "none");
+                                    $('#gpu-'+app+panel).attr('title', "");
+                                }
+                            });
+                        }
                         break;
                     case 'AMD':
                         $('.gpu-powerbar'+panel).removeAttr('style').css('width', parseInt(data["power"] / data["powermax"] * 100) + "%");

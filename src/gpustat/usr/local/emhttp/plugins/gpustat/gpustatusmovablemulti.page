@@ -262,6 +262,16 @@ $gpu_nv = $gpu_intel = $gpu_amd = $gpu_unknown = false;
              $page_render .="<tr class='vfio_notinuse$count'><td colspan ='2' ><span class='w36'><i class='ups fa fa-fw fa-pause-circle-o'></i>_(Interrupts/Sec)_" ;
              $page_render .="</span><span class='w44'><span class='gpu-interrupts$count load'></span></td></tr>" ;
         }
+
+        if($gpustat_cfg['DISPSESSIONS']) {
+            $page_render .= "<tr class='vfio_notinuse$count'><td colspan ='2' ><span class='w36'><i class='ups fa fa-fw icon-hardware'></i>_(Active Apps)_</span>" ;
+                foreach($apps as $app) {
+                    $page_render .= "<span id='w16 gpu-img-span-$app$count' class='gpu-img-span gpu-img-span-$app$count'>" ;
+                    $page_render .= "<img id='gpu-$app$count' class='gpu-image' src='/plugins/gpustat/images/$app.png'>" ;
+                    $page_render .= "</span>" ;
+                }
+            $page_render .= "</td></tr>" ;
+        }   
         
     }
 
