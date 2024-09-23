@@ -45,7 +45,28 @@ class Nvidia extends Main
         '/^(?P<busid>[0-9a-f]{2}).*\[AMD(\/ATI)?\]\s+(?P<model>.+)\s+(\[(?P<product>.+)\]|\()/imU';
 
     const STATISTICS_PARAM = '-q -x -g %s 2>&1';
-
+    const SUPPORTED_APPS = [ // Order here is important because some apps use the same binaries -- order should be more specific to less
+        'plex'        => ['Plex Transcoder'],
+        'jellyfin'    => ['jellyfin-ffmpeg'],
+        'handbrake'   => ['/usr/bin/HandBrakeCLI'],
+        'emby'        => ['emby'],
+        'tdarr'       => ['ffmpeg', 'HandbrakeCLI'],
+        'unmanic'     => ['ffmpeg'],
+        'dizquetv'    => ['ffmpeg'],
+        'ersatztv'    => ['ffmpeg'],
+        'fileflows'   => ['ffmpeg'],
+        'frigate'     => ['ffmpeg'],
+        'Threadfin'   => ['ffmpeg'],
+        'codeproject' => ['python3.8'],
+        'deepstack'   => ['python3'],
+        'nsfminer'    => ['nsfminer'],
+        'shinobipro'  => ['shinobi'],
+        'foldinghome' => ['FahCore'],
+        'compreface'  => ['uwsgi'],
+        'ollama'     => ['ollama_llama_server'],
+        'immich'     => ['/config/machine-learning/cuda'],
+        'localai'     => ['localai'],
+    ];
 
 
     /**
