@@ -59,9 +59,12 @@ class Intel extends Main
         'shinobipro'  => ['shinobi'],
         'foldinghome' => ['FahCore'],
         'compreface'  => ['uwsgi'],
-        'ollama'     => ['ollama_llama_server'],
-        'immich'     => ['/config/machine-learning/cuda'],
+        'ollama'      => ['ollama_llama_server'],
+        'immich'      => ['immich'],
         'localai'     => ['localai'],
+        'chia'        => ['chia'],
+        'mmx'         => ['mmx_node'],
+        'subspace'    => ['subspace'],
     ];
     /**
      * Intel constructor.
