@@ -67,6 +67,9 @@ class Nvidia extends Main
         'immich'     => ['/config/machine-learning/cuda'],
         'localai'     => ['localai'],
         'invokeai'    => ['invokeai'],
+        'chia'        => ['chia'],
+        'mmx'         => ['mmx_node'],
+        'subspace'    => ['subspace'],
     ];
 
 
