@@ -70,7 +70,6 @@ class Nvidia extends Main
     ];
 
 
-
     /**
      * Nvidia constructor.
      * @param array $settings
