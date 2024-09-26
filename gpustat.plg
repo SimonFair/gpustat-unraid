@@ -51,8 +51,8 @@
 <CHANGES>
 ###2024-09-26
 
-- add Chia, mmx and Subspace for NV
-- add revised Ollama icon
+- add Chia, mmx and Subspace for NV(PR from tjb-altf4 thanks)
+- add revised Ollama icon(PR from  nwithan8)
 - add App support for Intel. Some apps may need revision to show.
 
 ###2024-08-26a
