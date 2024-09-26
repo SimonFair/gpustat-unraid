@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "gpustat">
 <!ENTITY author    "b3rs3rk">
-<!ENTITY version   "2024.08.26a">
+<!ENTITY version   "2024.09.26">
 <!ENTITY launch    "Settings/GPUStatSettings">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/SimonFair/&name;-unraid/master">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
@@ -49,6 +49,12 @@
 -->
 
 <CHANGES>
+###2024-09-26
+
+- add Chia, mmx and Subspace for NV
+- add revised Ollama icon
+- add App support for Intel. Some apps may need revision to show.
+
 ###2024-08-26a
 
 - add LocalAI app for nvidia GPU - PR from  nwithan8.
