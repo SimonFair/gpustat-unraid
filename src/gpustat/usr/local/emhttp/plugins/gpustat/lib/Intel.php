@@ -181,6 +181,7 @@ class Intel extends Main
                 $this->pageData["vfio"] = false ;
                 $this->pageData["vfiochk"] = $this->checkVFIO($this->settings['GPUID']) ;
                 $this->pageData["vfiochkid"] = $this->settings['GPUID'] ;
+                $this->pageData['vfiovm'] = false;
             } else {
                 $this->pageData['error'][] = Error::get(Error::VENDOR_UTILITY_NOT_FOUND);
                 $this->pageData["vendor"] = "Intel" ;
@@ -191,6 +192,7 @@ class Intel extends Main
             $this->pageData["vendor"] = "Intel" ;
             $this->pageData["vfiochk"] = $this->checkVFIO($this->settings['GPUID']) ;
             $this->pageData["vfiochkid"] = $this->settings['GPUID'] ;
+            $this->pageData['vfiovm'] = $this->get_gpu_vm($this->settings['PCIID']);
             $gpus = $this->getInventory() ;
             if ($gpus) {
                 if (isset($gpus[$this->settings['GPUID']])) {

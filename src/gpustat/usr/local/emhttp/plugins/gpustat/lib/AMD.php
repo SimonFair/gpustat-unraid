@@ -159,6 +159,7 @@ class AMD extends Main
                 $this->pageData["vfio"] = false ;
                 $this->pageData["vfiochk"] = $this->checkVFIO("0000:".$this->settings['PCIID']) ;
                 $this->pageData["vfiochkid"] = "0000:".$this->settings['PCIID'] ;
+                $this->pageData['vfiovm'] = false;
             } else {
                 $this->pageData['error'][] = Error::get(Error::VENDOR_UTILITY_NOT_FOUND);
                 $this->pageData["vendor"] = "AMD" ;
@@ -169,6 +170,7 @@ class AMD extends Main
             $this->pageData["vendor"] = "AMD" ;
             $this->pageData["vfiochk"] = $this->checkVFIO("0000:".$this->settings['PCIID']) ;
             $this->pageData["vfiochkid"] = $this->settings['PCIID'] ;
+            $this->pageData['vfiovm'] = $this->get_gpu_vm($this->settings['PCIID']);
             $gpus = $this->getInventory() ;
             if ($gpus) {
                 if (isset($gpus[$this->settings['GPUID']])) {
