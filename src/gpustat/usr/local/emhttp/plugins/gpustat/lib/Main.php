@@ -147,6 +147,54 @@ class Main
         }
     }
 
+    protected function get_gpu_vm($vmpciid){
+        global $lstpci;
+        $libvirtd_running = is_file('/var/run/libvirt/libvirtd.pid') ;
+        if (!$libvirtd_running) return false;
+        if (!isset($lstpci)) {
+          $lspci_lines = explode("\n", trim(shell_exec("lspci -n")));
+          $lspci = array();
+            foreach ($lspci_lines as $line) {
+              // Strip content inside parentheses using preg_replace
+              $cleaned_line = preg_replace('/\s*\(.*?\)\s*/', '', $line);
+              // Split the cleaned line into parts
+              list($device, $info) = explode(' ', $cleaned_line, 2);
+              // Extract the key part for array key (both parts like c0a9:5407)
+              $info_parts = explode(' ', $info);
+              $key = $info_parts[1]; // This extracts the full key like "c0a9:5407"
+              // Add to the array using the extracted part as the key
+              $lspci[$key] = [
+                'type' => $info_parts[0],
+                'pciid' => $device
+              ];
+            }
+          }
+
+          # var_dump($output);
+           // Check if the output contains the PCI device ID
+
+
+
+       
+        $doms = explode("\n",shell_exec("virsh list --name"));      
+        for ($i = 0; $i < sizeof($doms); $i++) {
+            if ($doms[$i] == "") continue;
+            $name = $doms[$i];
+            $output = explode("\n",shell_exec('virsh qemu-monitor-command "'.$name.'" --hmp info pci | grep VGA'));
+            foreach($output as $string) {
+              // Check if the output contains the PCI device ID
+              if (preg_match('/PCI device (\S+)/', $string, $matches)) {
+                  // Extract the PCI device ID
+                  $pciDeviceID = $matches[1];
+                  if ($pciDeviceID == "1b36:0100") continue;
+                  $pciid = $lspci[$pciDeviceID]["pciid"];
+                  $vmpcilist[$pciid] = $name;
+              }
+            }
+        }
+          return isset($vmpcilist[$vmpciid]) ? $vmpcilist[$vmpciid] : false;
+      }
+
     /**
      * Retrieves the full command with arguments for a given process ID
      *

@@ -23,11 +23,15 @@
 */
 
 
-function toggleVFIO(vfio,panel) {
+function toggleVFIO(vfio,panel,vfiovm) {
     if (vfio) {
       $('.vfio_inuse'+panel).show();
       $('.vfio_notinuse'+panel).hide();
-      $('.vfio_status'+panel).text(_("GPU not available bound to VFIO or inuse in a VM."));
+      if (vfiovm != false) {
+        $('.vfio_status'+panel).text(_("GPU inuse in a VM: ")+vfiovm);
+      } else {
+        $('.vfio_status'+panel).text(_("GPU not available bound to VFIO"));
+      }
     } else {
       $('.vfio_inuse'+panel).hide();
       $('.vfio_notinuse'+panel).show();
@@ -102,8 +106,8 @@ const gpustat_statusm = (input) => {
                 }
 
                 $.each(data, function (key, data) {
-                    if (key == "error") {
-                        toggleVFIO(true,panel) ;
+                    if (key == "error") {   
+                        toggleVFIO(true,panel,false) ;
                         var error_text = data[0]["message"] ;
                         $('.vfio_status'+panel).text(_(error_text));
                     }
@@ -112,7 +116,7 @@ const gpustat_statusm = (input) => {
 
 
             } else {
-                toggleVFIO(true,panel) ;
+                toggleVFIO(true,panel,data["vfiovm"]) ;
                 $('.gpu-name'+panel).html(data["name"]);
                 $('.gpu-vendor'+panel).html(data["vendor"]);
             }
