@@ -189,24 +189,22 @@ class Nvidia extends Main
     {
         $result2 = $result = [];
 
-        if ($this->cmdexists) {
-            $this->runCommand(self::CMD_UTILITY, self::INVENTORY_PARAM, false);
-            if (!empty($this->stdout) && strlen($this->stdout) > 0) {
-                $this->parseInventory(self::INVENTORY_REGEX);
-                if (!empty($this->inventory)) {
-                    $result = $this->inventory;
-                }
+        $this->runCommand(self::CMD_UTILITY, self::INVENTORY_PARAM, false);
+        if (!empty($this->stdout) && strlen($this->stdout) > 0) {
+            $this->parseInventory(self::INVENTORY_REGEX);
+            if (!empty($this->inventory)) {
+                $result = $this->inventory;
             }
-            foreach($result as $gpu) {
-                $cmd =self::CMD_UTILITY . ES . sprintf(self::INVENTORY_PARM_PCI, $gpu['guid']) ;
-                $cmdres = $this->stdout = shell_exec($cmd); 
-                $pci = substr($cmdres,14,12);
-                $gpu['id'] = substr($pci,5) ;
-                $gpu['vendor'] = 'nvidia' ;
-                $result2[$pci] = $gpu ; 
-            }
-            if (empty($result)) $result2=$this->getPCIInventory() ;
         }
+        foreach($result as $gpu) {
+            $cmd =self::CMD_UTILITY . ES . sprintf(self::INVENTORY_PARM_PCI, $gpu['guid']) ;
+            $cmdres = $this->stdout = shell_exec($cmd); 
+            $pci = substr($cmdres,14,12);
+            $gpu['id'] = substr($pci,5) ;
+            $gpu['vendor'] = 'nvidia' ;
+            $result2[$pci] = $gpu ; 
+        }
+        if (empty($result)) $result2=$this->getPCIInventory() ;
 
         return $result2;
     }
@@ -220,33 +218,32 @@ class Nvidia extends Main
     {
         $result = [];
 
+        $this->checkCommand(self::PCI_INVENTORY_UTILITY, false);
         if ($this->cmdexists) {
-            $this->checkCommand(self::PCI_INVENTORY_UTILITY, false);
-            if ($this->cmdexists) {
-                $this->runCommand(self::PCI_INVENTORY_UTILITY, self::PCI_INVENTORY_PARAMm, false);
-                if (!empty($this->stdout) && strlen($this->stdout) > 0) {
-                    foreach(explode(PHP_EOL,$this->stdout) AS $vga) {
-                        preg_match_all('/"([^"]*)"|(\S+)/', $vga, $matches);
-                        if (!isset( $matches[0][0])) continue ;
-                        $id = str_replace('"', '', $matches[0][0]) ;
-                        $vendor = str_replace('"', '',$matches[0][2]) ;
-                        $model = str_replace('"', '',$matches[0][3]) ;
-                        $modelstart = strpos($model,'[') ;
-                        $model = substr($model,$modelstart,strlen($model)- $modelstart) ;
-                        $model= str_replace(array("Quadro","GeForce","[","]"),"",$model) ;
+            $this->runCommand(self::PCI_INVENTORY_UTILITY, self::PCI_INVENTORY_PARAMm, false);
+            if (!empty($this->stdout) && strlen($this->stdout) > 0) {
+                foreach(explode(PHP_EOL,$this->stdout) AS $vga) {
+                    preg_match_all('/"([^"]*)"|(\S+)/', $vga, $matches);
+                    if (!isset( $matches[0][0])) continue ;
+                    $id = str_replace('"', '', $matches[0][0]) ;
+                    $vendor = str_replace('"', '',$matches[0][2]) ;
+                    $model = str_replace('"', '',$matches[0][3]) ;
+                    $modelstart = strpos($model,'[') ;
+                    $model = substr($model,$modelstart,strlen($model)- $modelstart) ;
+                    $model= str_replace(array("Quadro","GeForce","[","]"),"",$model) ;
 
-                        if ($vendor != "NVIDIA Corporation") continue ;
-                        $result[$id] = [
-                            'id' => substr($id,5) ,
-                            'model' => $model ,
-                            'vendor' => 'nvidia',
-                            'guid' => $id
-                        ];
+                    if ($vendor != "NVIDIA Corporation") continue ;
+                    $result[$id] = [
+                        'id' => substr($id,5) ,
+                        'model' => $model ,
+                        'vendor' => 'nvidia',
+                        'guid' => $id
+                    ];
 
-                     }
-                 }
-            }
+                    }
+                }
         }
+
         return $result;
     }
 
