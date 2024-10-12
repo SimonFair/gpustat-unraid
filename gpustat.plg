@@ -52,6 +52,7 @@
 ###2024-10-12
 
 - add Show which VM is using GPU.
+- remove dependency for gpu tools.
 
 ###2024-09-26
 
@@ -265,11 +266,10 @@ elif [ "$(which radeontop 2>/dev/null)" ] || [ -d /boot/config/plugins/radeontop
 else
     echo "********************************************************************"
     echo
-    echo "No vendor utilities found.  Plugin install terminated due to failed prerequisites."
+    echo "No vendor utilities found."
+    echo "Limited functions only i.e. if bound to vfio or a GPU active in a VM."
     echo
     echo "********************************************************************"
-    rm -rf /boot/config/plugins/&name;
-    exit 1
 fi
 
 </INLINE>
