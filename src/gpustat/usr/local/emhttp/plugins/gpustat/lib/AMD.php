@@ -113,28 +113,26 @@ class AMD extends Main
     {
         $result = [];
 
+        $this->checkCommand(self::INVENTORY_UTILITY, false);
         if ($this->cmdexists) {
-            $this->checkCommand(self::INVENTORY_UTILITY, false);
-            if ($this->cmdexists) {
-                $this->runCommand(self::INVENTORY_UTILITY, self::INVENTORY_PARAMm, false);
-                if (!empty($this->stdout) && strlen($this->stdout) > 0) {
-                    foreach(explode(PHP_EOL,$this->stdout) AS $vga) {
-                        preg_match_all('/"([^"]*)"|(\S+)/', $vga, $matches);
-                        if (!isset( $matches[0][0])) continue ;
-                        $id = str_replace('"', '', $matches[0][0]) ;
-                        $vendor = str_replace('"', '',$matches[0][2]) ;
-                        $model = str_replace('"', '',$matches[0][3]) ;
-                        if ($vendor != "Advanced Micro Devices, Inc. [AMD/ATI]") continue ;
-                        $result[$id] = [
-                            'id' => substr($id,5) ,
-                            'model' => $model,
-                            'vendor' => 'amd',
-                            'guid' => substr($id,5,2)
-                        ];
+            $this->runCommand(self::INVENTORY_UTILITY, self::INVENTORY_PARAMm, false);
+            if (!empty($this->stdout) && strlen($this->stdout) > 0) {
+                foreach(explode(PHP_EOL,$this->stdout) AS $vga) {
+                    preg_match_all('/"([^"]*)"|(\S+)/', $vga, $matches);
+                    if (!isset( $matches[0][0])) continue ;
+                    $id = str_replace('"', '', $matches[0][0]) ;
+                    $vendor = str_replace('"', '',$matches[0][2]) ;
+                    $model = str_replace('"', '',$matches[0][3]) ;
+                    if ($vendor != "Advanced Micro Devices, Inc. [AMD/ATI]") continue ;
+                    $result[$id] = [
+                        'id' => substr($id,5) ,
+                        'model' => $model,
+                        'vendor' => 'amd',
+                        'guid' => substr($id,5,2)
+                    ];
 
-                     }
-                 }
-            }
+                    }
+                }
         }
 
         return $result;
