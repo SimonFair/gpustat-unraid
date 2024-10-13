@@ -206,7 +206,7 @@ class Main
         } elseif (is_file("$docroot/boot/config/plugins/dynamix.vm.manager/templates/images/" . $strIcon)) {
             $strIcon = '/boot/config/plugins/dynamix.vm.manager/templates/images/' . $strIcon;
         }
-        return isset($vmpcilist[$vmpciid]) ? $vmpcilist[$vmpciid].':'.$strIcon : false;
+        return isset($vmpcilist[$vmpciid]) ? $vmpcilist[$vmpciid].','.$strIcon : false;
       }
 
     /**

@@ -28,7 +28,7 @@ function toggleVFIO(vfio,panel,vfiovm) {
       $('.vfio_inuse'+panel).show();
       $('.vfio_notinuse'+panel).hide();
       if (vfiovm != false) {
-        var vfiovmsplit = vfiovm.split(":"); 
+        var vfiovmsplit = vfiovm.split(","); 
         $('.vfio_status'+panel).text(_("GPU inuse in a VM: ")+vfiovmsplit[0]);
         $('.vmicon'+panel).attr('src', vfiovmsplit[1]);
         $('.vmicon'+panel).show();
