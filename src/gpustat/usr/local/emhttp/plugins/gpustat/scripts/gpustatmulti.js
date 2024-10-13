@@ -28,9 +28,13 @@ function toggleVFIO(vfio,panel,vfiovm) {
       $('.vfio_inuse'+panel).show();
       $('.vfio_notinuse'+panel).hide();
       if (vfiovm != false) {
-        $('.vfio_status'+panel).text(_("GPU inuse in a VM: ")+vfiovm);
+        var vfiovmsplit = vfiovm.split(","); 
+        $('.vfio_status'+panel).text(_("GPU inuse in a VM: ")+vfiovmsplit[0]);
+        $('.vmicon'+panel).attr('src', vfiovmsplit[1]);
+        $('.vmicon'+panel).show();
       } else {
         $('.vfio_status'+panel).text(_("GPU not available bound to VFIO"));
+        $('.vmicon'+panel).hide();
       }
     } else {
       $('.vfio_inuse'+panel).hide();
