@@ -192,7 +192,21 @@ class Main
               }
             }
         }
-          return isset($vmpcilist[$vmpciid]) ? $vmpcilist[$vmpciid] : false;
+
+        #GetIcon
+        global $docroot;
+        $strIcon = '/plugins/dynamix.vm.manager/templates/images/default.png';
+        $strIconGet = shell_exec("virsh dumpxml '".$vmpcilist[$vmpciid]."' --xpath \"//domain/metadata/*[local-name()='vmtemplate']/@icon\"");
+        preg_match('/icon="([^"]+)"/', $strIconGet, $matches);
+        $strIcon = $matches[1] ?? $strIcon;  // This will contain the icon value
+        if (is_file($strIcon)) {
+            $strIcon = $strIcon;
+        } elseif (is_file("$docroot/plugins/dynamix.vm.manager/templates/images/" . $strIcon)) {
+            $strIcon = '/plugins/dynamix.vm.manager/templates/images/' . $strIcon;
+        } elseif (is_file("$docroot/boot/config/plugins/dynamix.vm.manager/templates/images/" . $strIcon)) {
+            $strIcon = '/boot/config/plugins/dynamix.vm.manager/templates/images/' . $strIcon;
+        }
+        return isset($vmpcilist[$vmpciid]) ? $vmpcilist[$vmpciid].':'.$strIcon : false;
       }
 
     /**
