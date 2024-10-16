@@ -369,13 +369,13 @@ class Nvidia extends Main
             } else {
                 $this->pageData['error'][] = Error::get(Error::VENDOR_UTILITY_NOT_FOUND);
                 $this->pageData["vendor"] = "Nvidia" ;
+                $this->pageData["name"] = "GPU is an Nvidia" ;
                 $gpus = $this->getPCIInventory() ;
                 if ($gpus) {
-                    if (isset($gpus[$this->settings['PCIID']])) {
-                        $this->pageData['name'] = $gpus[$this->settings['PCIID']]["model"] ;
+                    if (isset($gpus["0000:".$this->settings['PCIID']])) {
+                        $this->pageData['name'] = $gpus["0000:".$this->settings['PCIID']]["model"] ;
                     }
-                }
-                $this->pageData["name"] = $this->settings['GPUID'] ;
+                } else $this->pageData["name"] = $this->settings['GPUID'] ;
             }
             $this->pageData["vfio"] = false ;
             $this->pageData["vfiochk"] = $this->checkVFIO("0000:".$this->settings['PCIID']) ;

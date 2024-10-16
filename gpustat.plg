@@ -322,6 +322,7 @@ fi
     DISPDEPTHBLK="1"
     DISPCOLORBLK="1"
     DISPGFXTRANS="1"
+    IGTTIMER =".500 1.5"
    ]]>
   </INLINE>
  </FILE>
