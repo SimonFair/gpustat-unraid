@@ -49,7 +49,7 @@ class Nvidia extends Main
         'plex'        => ['Plex Transcoder'],
         'jellyfin'    => ['jellyfin-ffmpeg'],
         'handbrake'   => ['/usr/bin/HandBrakeCLI'],
-        'emby'        => ['emby'],
+        'emby'        => ['ffmpeg', 'Emby'],
         'tdarr'       => ['ffmpeg', 'HandbrakeCLI'],
         'unmanic'     => ['ffmpeg'],
         'dizquetv'    => ['ffmpeg'],
@@ -70,6 +70,7 @@ class Nvidia extends Main
         'chia'        => ['chia'],
         'mmx'         => ['mmx_node'],
         'subspace'    => ['subspace'],
+        'xorg'        => ['xorg'],
     ];
 
 
