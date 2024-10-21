@@ -49,7 +49,7 @@ class Nvidia extends Main
         'plex'        => ['Plex Transcoder'],
         'jellyfin'    => ['jellyfin-ffmpeg'],
         'handbrake'   => ['/usr/bin/HandBrakeCLI'],
-        'emby'        => ['emby'],
+        'emby'        => ['ffmpeg Emby'],
         'tdarr'       => ['ffmpeg', 'HandbrakeCLI'],
         'unmanic'     => ['ffmpeg'],
         'dizquetv'    => ['ffmpeg'],
@@ -66,6 +66,7 @@ class Nvidia extends Main
         'ollama'     => ['ollama_llama_server'],
         'immich'     => ['/config/machine-learning/cuda'],
         'localai'     => ['localai'],
+        'xorg'        => ['xorg'],
     ];
 
 

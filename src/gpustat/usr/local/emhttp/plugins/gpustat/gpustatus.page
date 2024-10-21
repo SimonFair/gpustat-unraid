@@ -34,7 +34,7 @@ Cond="version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.12.0-b
     $apps = [
         'plex', 'jellyfin', 'handbrake', 'emby', 'tdarr', 'unmanic', 'dizquetv', 'ersatztv',
         'fileflows', 'frigate', 'deepstack', 'nsfminer', 'shinobipro', 'foldinghome', 'compreface',
-        'ollama','immich', 'localai',
+        'ollama','immich', 'localai','xorg'
     ];
 
     switch ($gpustat_cfg['VENDOR']) {

@@ -45,7 +45,7 @@ class Intel extends Main
         'plex'        => ['Plex Transcoder'],
         'jellyfin'    => ['jellyfin-ffmpeg'],
         'handbrake'   => ['/usr/bin/HandBrakeCLI'],
-        'emby'        => ['emby'],
+        'emby'        => ['ffmpeg', 'Emby'],
         'tdarr'       => ['ffmpeg', 'HandbrakeCLI'],
         'unmanic'     => ['ffmpeg'],
         'dizquetv'    => ['ffmpeg'],
@@ -65,6 +65,8 @@ class Intel extends Main
         'chia'        => ['chia'],
         'mmx'         => ['mmx_node'],
         'subspace'    => ['subspace'],
+        'xorg'        => ['Xorg'],
+
     ];
     /**
      * Intel constructor.
@@ -230,7 +232,7 @@ class Intel extends Main
         if ($count < 1) {
             $this->pageData['error'][] = Error::get(Error::VENDOR_DATA_NOT_ENOUGH, "Count: $count");
         }
-        file_put_contents("/tmp/gpudata",json_encode($data));
+        file_put_contents("/tmp/gpudata".$this->settings['GPUID'],json_encode($data));
         // intel_gpu_top will never show utilization counters on the first sample so we need the second position
         unset($stdout, $this->stdout);
 
@@ -302,6 +304,7 @@ class Intel extends Main
             if ($this->settings['DISPPWRSTATE']) {
                 if (isset($data['rc6']['value'])) {
                     $this->pageData['powerutil'] = $this->roundFloat(100 - $data['rc6']['value'], 2) . "%";
+                    #$this->pageData['powerutil'] = $this->roundFloat(100 - 50, 2) . "%";
                 }
             }
             if ($this->settings['DISPCLOCKS']) {

@@ -58,11 +58,6 @@ $multi = urldecode($gpustat_cfg["MULTIGPUJSON"]) ;
 $multigpus = json_decode($multi,true) ;
 $gpu_nv = $gpu_intel = $gpu_amd = $gpu_unknown = false;
 
-$apps = [
-    'plex', 'jellyfin', 'handbrake', 'emby', 'tdarr', 'unmanic', 'dizquetv', 'ersatztv',
-    'fileflows', 'frigate', 'deepstack', 'nsfminer', 'shinobipro', 'foldinghome','threadfin', 'codeproject', 'compreface',
-    'ollama',
-];
 
 $i= $j =$k = 1;  
 $gpus_selected = count($multigpus) ;
@@ -117,7 +112,7 @@ function GPULayout($count,$vendor,$gpustat_cfg) {
     $apps = [
     'plex', 'jellyfin', 'handbrake', 'emby', 'tdarr', 'unmanic', 'dizquetv', 'ersatztv',
     'fileflows', 'frigate', 'deepstack', 'nsfminer', 'shinobipro', 'foldinghome','threadfin', 'codeproject', 'compreface',
-    'ollama','immich','localai',
+    'ollama','immich','localai','xorg'
 ];
 $gpu_nv = $gpu_intel = $gpu_amd = $gpu_unknown = false;
     switch ($vendor) {
