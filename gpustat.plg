@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "gpustat">
 <!ENTITY author    "b3rs3rk">
-<!ENTITY version   "2024.08.26">
+<!ENTITY version   "2024.10.16">
 <!ENTITY launch    "Settings/GPUStatSettings">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/SimonFair/&name;-unraid/master">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
@@ -49,6 +49,34 @@
 -->
 
 <CHANGES>
+###2024-10-16
+
+- add Intel timers to settings
+- fix Nvidia model if not tools loaded.
+
+###2024-10-13
+
+- add icon to next to VM.
+
+###2024-10-12a
+
+- remove dependency for gpu tools.
+
+###2024-10-12
+
+- add Show which VM is using GPU.
+
+###2024-09-26
+
+- add Chia, mmx and Subspace for NV(PR from tjb-altf4 thanks)
+- add revised Ollama icon(PR from  nwithan8)
+- add App support for Intel. Some apps may need revision to show.
+
+###2024-08-26a
+
+- add LocalAI app for nvidia GPU - PR from  nwithan8.
+- add Immich for nvidia GPU - PR from  nwithan8.
+
 ###2024-08-26
 
 - Fix timer abs values
@@ -250,11 +278,10 @@ elif [ "$(which radeontop 2>/dev/null)" ] || [ -d /boot/config/plugins/radeontop
 else
     echo "********************************************************************"
     echo
-    echo "No vendor utilities found.  Plugin install terminated due to failed prerequisites."
+    echo "No vendor utilities found."
+    echo "Limited functions only i.e. if bound to vfio or a GPU active in a VM."
     echo
     echo "********************************************************************"
-    rm -rf /boot/config/plugins/&name;
-    exit 1
 fi
 
 </INLINE>
