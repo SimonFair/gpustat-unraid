@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "gpustat">
 <!ENTITY author    "b3rs3rk">
-<!ENTITY version   "2024.10.16">
+<!ENTITY version   "2024.10.21">
 <!ENTITY launch    "Settings/GPUStatSettings">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/SimonFair/&name;-unraid/master">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
@@ -49,6 +49,11 @@
 -->
 
 <CHANGES>
+###2024-10-21
+
+- add Xorg App
+- fix Emby
+
 ###2024-10-16
 
 - add Intel timers to settings
