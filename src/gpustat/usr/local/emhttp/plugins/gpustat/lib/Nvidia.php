@@ -70,7 +70,7 @@ class Nvidia extends Main
         'chia'        => ['chia'],
         'mmx'         => ['mmx_node'],
         'subspace'    => ['subspace'],
-        'xorg'        => ['xorg'],
+        'xorg'        => ['Xorg'],
     ];
 
 

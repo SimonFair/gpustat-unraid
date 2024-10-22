@@ -288,6 +288,15 @@ class Intel extends Main
                     $this->pageData['txutil'] = $this->roundFloat($data['imc-bandwidth']['writes'], 2) . " MB/s";
                 }
             }
+   
+            if (is_numeric(rtrim($this->pageData['3drender'],"%"))) $max3drenderchk = $this->pageData['3drender']; else $max3drenderchk = "0%";
+            if (is_numeric(rtrim($this->pageData['blitter'],"%"))) $maxblitterchk = $this->pageData['bliter']; else $maxblitterchk = "0%";
+            if (is_numeric(rtrim($this->pageData['video'],"%"))) $maxvideochk = $this->pageData['video']; else $maxvideochk = "0%";
+            if (is_numeric(rtrim($this->pageData['videnh'],"%"))) $maxvidenhchk = $this->pageData['videnh']; else $maxvidenhchk = "0%";
+
+            $maxload = (max($max3drenderchk ,$maxblitterchk, $maxvideochk, $maxvidenhchk));
+            $this->pageData['util'] = $maxload;
+
             if ($this->settings['DISPPWRDRAW']) {
                 // Older versions of intel_gpu_top in case people haven't updated
                 if (isset($data['power']['value'])) {
