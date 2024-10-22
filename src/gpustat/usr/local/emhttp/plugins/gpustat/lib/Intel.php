@@ -43,7 +43,7 @@ class Intel extends Main
     const STATISTICS_WRAPPER = 'timeout -k ';
     const SUPPORTED_APPS = [ // Order here is important because some apps use the same binaries -- order should be more specific to less
         'plex'        => ['Plex Transcoder'],
-        'jellyfin'    => ['jellyfin-ffmpeg'],
+        'jellyfin'    => ['ffmpeg','jellyfin'],
         'handbrake'   => ['/usr/bin/HandBrakeCLI'],
         'emby'        => ['ffmpeg', 'Emby'],
         'tdarr'       => ['ffmpeg', 'HandbrakeCLI'],
