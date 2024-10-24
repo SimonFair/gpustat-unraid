@@ -91,6 +91,8 @@ class Nvidia extends Main
      */
     private function detectApplication (SimpleXMLElement $process)
     {
+        $debug_apps = false;
+        if ($debug_apps) file_put_contents("/tmp/gpuappsnv","");
         foreach (self::SUPPORTED_APPS as $app => $commands) {
             foreach ($commands as $command) {
                 if (strpos($process->process_name, $command) !== false) {
@@ -98,6 +100,7 @@ class Nvidia extends Main
                     if (in_array($command, ['ffmpeg', 'HandbrakeCLI', 'python3.8','python3'])) {
                         if (isset($process->pid)) {
                             $pid_info = $this->getFullCommand((int) $process->pid);
+                            if ($debug_apps) file_put_contents("/tmp/gpuappsnv","$command\n$pid_info\n",FILE_APPEND);
                             if (!empty($pid_info) && strlen($pid_info) > 0) {
                                 if ($command === 'python3.8') {
                                     // CodeProject doesn't have any signifier in the full command output
@@ -112,10 +115,12 @@ class Nvidia extends Main
                                 } elseif (stripos($pid_info, strtolower($app)) === false) {
                                     // Try to match the app name in the parent process
                                     $ppid_info = $this->getParentCommand((int) $process->pid);
+                                    if ($debug_apps) file_put_contents("/tmp/gpuappsnv","$ppid_info\n",FILE_APPEND);
                                     if (stripos($ppid_info, $app) === false) {
                                         // We didn't match the application name in the arguments, no match
+                                        if ($debug_apps) file_put_contents("/tmp/gpuappsnv","not found app $app\n",FILE_APPEND);
                                         continue 2;
-                                    }
+                                    } else if ($debug_apps) file_put_contents("/tmp/gpuappsnv","\nfound app $app\n",FILE_APPEND);
                                 }
                             }
                         }
@@ -123,6 +128,7 @@ class Nvidia extends Main
                     $this->pageData[$app . 'using'] = true;
                     $this->pageData[$app . 'mem'] += (int)$this->stripText(' MiB', $process->used_memory);
                     $this->pageData[$app . 'count']++;
+                    if ($debug_apps) file_put_contents("/tmp/gpuappsnv","\nfound app $app $command\n",FILE_APPEND);
                     // If we match a more specific command/app to a process, continue on to the next process
                     break 2;
                 }
