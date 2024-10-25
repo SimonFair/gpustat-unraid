@@ -108,7 +108,7 @@ class Intel extends Main
                                     }
                                 } elseif (stripos($pid_info, strtolower($app)) === false) {
                                     // Try to match the app name in the parent process
-                                    $ppid_info = $this->getParentCommand((int) $process['pid']);
+                                    $ppid_info = $this->getParentCommandIntel((int) $process['pid']);
                                     if ($debug_apps) file_put_contents("/tmp/gpuappsint","$ppid_info\n",FILE_APPEND);
                                     if (stripos($ppid_info, $app) === false) {
                                         // We didn't match the application name in the arguments, no match
@@ -122,7 +122,7 @@ class Intel extends Main
                     $this->pageData[$app . 'using'] = true;
                     #$this->pageData[$app . 'mem'] += (int)$this->stripText(' MiB', $process->used_memory);
                     $this->pageData[$app . 'mem'] = 0;
-                    $this->pageData[$app . 'count']++;
+                    if (isset($this->pageData[$app . 'count'])) $this->pageData[$app . 'count']++; else $this->pageData[$app . 'count'] = 1;
                     if ($debug_apps) file_put_contents("/tmp/gpuappsint","\nfound app $app $command\n",FILE_APPEND);
                     // If we match a more specific command/app to a process, continue on to the next process
                     break 2;
@@ -295,13 +295,13 @@ class Intel extends Main
                 }
             }
    
-            if (is_numeric(rtrim($this->pageData['3drender'],"%"))) $max3drenderchk = $this->pageData['3drender']; else $max3drenderchk = "0%";
-            if (is_numeric(rtrim($this->pageData['blitter'],"%"))) $maxblitterchk = $this->pageData['bliter']; else $maxblitterchk = "0%";
-            if (is_numeric(rtrim($this->pageData['video'],"%"))) $maxvideochk = $this->pageData['video']; else $maxvideochk = "0%";
-            if (is_numeric(rtrim($this->pageData['videnh'],"%"))) $maxvidenhchk = $this->pageData['videnh']; else $maxvidenhchk = "0%";
+            if (is_numeric(rtrim($this->pageData['3drender'],"%"))) $max3drenderchk = intval(rtrim($this->pageData['3drender'],"%")); else $max3drenderchk = 0;
+            if (is_numeric(rtrim($this->pageData['blitter'],"%"))) $maxblitterchk = intval(rtrim($this->pageData['blitter'],"%")); else $maxblitterchk = 0;
+            if (is_numeric(rtrim($this->pageData['video'],"%"))) $maxvideochk = intval(rtrim($this->pageData['video'],"%")); else $maxvideochk = 0;
+            if (is_numeric(rtrim($this->pageData['videnh'],"%"))) $maxvidenhchk =intval(rtrim( $this->pageData['videnh'],"%")); else $maxvidenhchk = 0;
 
             $maxload = (max($max3drenderchk ,$maxblitterchk, $maxvideochk, $maxvidenhchk));
-            $this->pageData['util'] = $maxload;
+            $this->pageData['util'] = $maxload.'%';
 
             if ($this->settings['DISPPWRDRAW']) {
                 // Older versions of intel_gpu_top in case people haven't updated

@@ -246,6 +246,18 @@ class Main
         return $command;
     }
 
+    protected function getParentCommandIntel(int $pid): string
+    {
+        $command = '';
+        $pid_command = 'ps -o ppid= '.$pid;
+
+        $ppid = (int)trim(shell_exec($pid_command));
+        if ($ppid > 0) {
+            $command = $this->getFullCommand($ppid);
+        }
+
+        return $command;
+    }
     /**
      * Retrieves plugin settings and returns them or defaults if no file
      *
