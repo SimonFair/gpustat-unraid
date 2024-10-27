@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "gpustat">
 <!ENTITY author    "b3rs3rk">
-<!ENTITY version   "2024.10.25a">
+<!ENTITY version   "2024.10.27">
 <!ENTITY launch    "Settings/GPUStatSettings">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/SimonFair/&name;-unraid/master">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
@@ -49,6 +49,10 @@
 -->
 
 <CHANGES>
+###2025-10-27
+
+- add tunarr
+
 ###2025-10-25a
 
 - fix parent pid check so Emby is detected.
