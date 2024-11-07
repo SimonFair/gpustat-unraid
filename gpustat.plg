@@ -1,7 +1,7 @@
 <?xml version='1.0' standalone='yes'?>
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "gpustat">
-<!ENTITY author    "b3rs3rk">
+<!ENTITY author    "SimonFair">
 <!ENTITY version   "2024.11.07">
 <!ENTITY launch    "Settings/GPUStatSettings">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/SimonFair/&name;-unraid/master">
@@ -53,6 +53,7 @@
 
 - fix config path
 - chg State Threshold layout for Nvidia GPUs.
+
 ###2025-10-27
 
 - add tunarr
