@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "gpustat">
 <!ENTITY author    "b3rs3rk">
-<!ENTITY version   "2024.10.16">
+<!ENTITY version   "2024.10.27">
 <!ENTITY launch    "Settings/GPUStatSettings">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/SimonFair/&name;-unraid/master">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
@@ -49,6 +49,32 @@
 -->
 
 <CHANGES>
+###2025-10-27
+
+- add tunarr
+
+###2025-10-25a
+
+- fix parent pid check so Emby is detected.
+- php and max util check updates.
+
+###2024-10-25
+
+- add apps debug options, defaults off need to edit Intel or Nvidia lib files to make =true.
+
+###2024-10-22a
+
+- fix Jellyfin
+
+###2024-10-22
+
+- add Intel use max util from the 4 bars as title util.
+
+###2024-10-21
+
+- add Xorg App
+- fix Emby
+
 ###2024-10-16
 
 - add Intel timers to settings
