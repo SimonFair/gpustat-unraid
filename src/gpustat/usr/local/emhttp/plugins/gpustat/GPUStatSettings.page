@@ -141,10 +141,9 @@ Unit ID for Dashboard:
 
 <?php if ($multi_enable) : ?>
 Unit ID for Dashboard(Multiple):
-:  <select id="MULTIGPU" name="MULTIGPU[]" multiple="multiple" style="display:none">
-   
+:  <select id="MULTIGPU" name="MULTIGPU[]" multiple="multiple" style="display:none"> 
  <?php	
-	  if (isset($gpustat_data)) {
+      if (isset($gpustat_data)) {
       ksort($gpustat_data) ;
       foreach ($gpustat_data AS $gpu) {
         $gpudesc = sprintf('%s: %s - %s', $gpu['id'], $gpu['model'], $gpu['guid']);

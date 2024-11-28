@@ -53,6 +53,10 @@
 
 - plg file updates.
 
+###2025-11-18
+
+- fix chrome browser issue for select in settings.
+
 ###2025-11-07
 
 - fix config path
