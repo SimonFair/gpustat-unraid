@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "gpustat">
 <!ENTITY author    "SimonFair">
-<!ENTITY version   "2024.11.28">
+<!ENTITY version   "2024.12.03">
 <!ENTITY launch    "Settings/GPUStatSettings">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/SimonFair/&name;-unraid/master">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
@@ -49,24 +49,28 @@
 -->
 
 <CHANGES>
-###2025-11-28
+###2024-12-03
+
+- re package
+
+###2024-11-28
 
 - plg file updates.
 
-###2025-11-18
+###2024-11-18
 
 - fix chrome browser issue for select in settings.
 
-###2025-11-07
+###2024-11-07
 
 - fix config path
 - chg State Threshold layout for Nvidia GPUs.
 
-###2025-10-27
+###2024-10-27
 
 - add tunarr
 
-###2025-10-25a
+###2024-10-25a
 
 - fix parent pid check so Emby is detected.
 - php and max util check updates.
