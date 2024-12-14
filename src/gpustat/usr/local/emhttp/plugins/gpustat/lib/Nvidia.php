@@ -72,6 +72,7 @@ class Nvidia extends Main
         'mmx'         => ['mmx_node'],
         'subspace'    => ['subspace'],
         'xorg'        => ['Xorg'],
+        'qemu'        => ['qemu'],
     ];
 
 

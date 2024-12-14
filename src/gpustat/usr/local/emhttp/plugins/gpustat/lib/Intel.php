@@ -67,6 +67,7 @@ class Intel extends Main
         'mmx'         => ['mmx_node'],
         'subspace'    => ['subspace'],
         'xorg'        => ['Xorg'],
+        'qemu'        => ['qemu'],
 
     ];
     /**
@@ -179,7 +180,6 @@ class Intel extends Main
                 //Command invokes intel_gpu_top in JSON output mode with an update rate of 5 seconds
                 if (!isset($this->settings['IGTTIMER'])) $this->settings['IGTTIMER'] = ".500 1.500";
                 $command = self::STATISTICS_WRAPPER . ES . $this->settings['IGTTIMER'] . ES . self::CMD_UTILITY;
-                            //Command invokes radeontop in STDOUT mode with an update limit of half a second @ 120 samples per second
                 $this->runCommand($command, self::STATISTICS_PARAM. $this->settings['GPUID'].'"', false); 
                 if (!empty($this->stdout) && strlen($this->stdout) > 0) {
                     $this->parseStatistics();
