@@ -85,7 +85,7 @@ foreach ($multigpus as $id=>$gpu) {
         if ($gpu_nv || $gpu_amd) {
         if ($gpustat_cfg['DISPTEMP']) $stats .= "<span class='vfio_notinuse$i'> Temperature: <span class='gpu-temp{$i}'></span></span>" ;
     }
-    if ($gpu_nv && $gpustat_cfg['DISPSESSIONS']) $stats .="<span class='vfio_notinuse$i'> Processes: <span class='gpu-sessions{$i}'></span></span>";
+    if (($gpu_nv || $gpu_intel) && $gpustat_cfg['DISPSESSIONS']) $stats .="<span class='vfio_notinuse$i'> Processes: <span class='gpu-sessions{$i}'></span></span>";
     $stats .= "<br><br></div>" ;
     $layout = GPULayout($i, $gpu["vendor"],$gpustat_cfg) ;
     $mytiles[$pluginname.$k]['column'.$j] =
