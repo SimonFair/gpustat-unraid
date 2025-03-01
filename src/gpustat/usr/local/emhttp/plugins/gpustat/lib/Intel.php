@@ -87,7 +87,7 @@ class Intel extends Main
      */
     private function detectApplication (array $process)
     {
-        $debug_apps = false;
+        $debug_apps = is_file("/tmp/gpustatapps") ?? false;
         if ($debug_apps) file_put_contents("/tmp/gpuappsint","");
         foreach (self::SUPPORTED_APPS as $app => $commands) {
             foreach ($commands as $command) {
@@ -181,6 +181,7 @@ class Intel extends Main
                 if (!isset($this->settings['IGTTIMER'])) $this->settings['IGTTIMER'] = ".500 1.500";
                 $command = self::STATISTICS_WRAPPER . ES . $this->settings['IGTTIMER'] . ES . self::CMD_UTILITY;
                 $this->runCommand($command, self::STATISTICS_PARAM. $this->settings['GPUID'].'"', false); 
+                #$this->runCommand("cat ", " /tmp/i915.txt", false); 
                 if (!empty($this->stdout) && strlen($this->stdout) > 0) {
                     $this->parseStatistics();
                 } else {
@@ -254,6 +255,7 @@ class Intel extends Main
                 'powerutil'     => 'N/A',
                 'video'         => 'N/A',
                 'videnh'        => 'N/A',
+                'sessions'      => 0,
             ];
             $gpus = $this->getInventory() ;
             if ($gpus) {
