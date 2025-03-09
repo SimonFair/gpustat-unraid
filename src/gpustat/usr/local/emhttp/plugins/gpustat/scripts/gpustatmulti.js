@@ -123,6 +123,16 @@ const gpustat_statusm = (input) => {
                 toggleVFIO(true,panel,data["vfiovm"]) ;
                 $('.gpu-name'+panel).html(data["name"]);
                 $('.gpu-vendor'+panel).html(data["vendor"]);
+                $('.gpu-driver'+panel).html(data["driver"]);
+                $('.gpu-pciegen'+panel).html(data["pciegen"]);
+                $('.gpu-pciegenmax'+panel).html(data["pciegenmax"]);
+                $('.gpu-pciewidth'+panel).html(data["pciewidth"]);
+                $('.gpu-pciewidthmax'+panel).html(data["pciewidthmax"]);
+            }
+            if (data["igpu"] == "1") {
+                $('.nopcie'+panel).hide();
+            } else {
+                $('.nopcie'+panel).show();
             }
             var hidden = $.cookie('hidden_content');
             if (hidden) {

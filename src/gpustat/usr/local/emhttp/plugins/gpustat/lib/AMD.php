@@ -143,6 +143,7 @@ class AMD extends Main
      */
     public function getStatistics()
     {
+        $driver = strtoupper($this->getKernelDriver("0000:".$this->settings['PCIID']));
         if (!$this->checkVFIO("0000:".$this->settings['PCIID']))
         {
             if ($this->cmdexists) {
@@ -158,10 +159,12 @@ class AMD extends Main
                 $this->pageData["vfiochk"] = $this->checkVFIO("0000:".$this->settings['PCIID']) ;
                 $this->pageData["vfiochkid"] = "0000:".$this->settings['PCIID'] ;
                 $this->pageData['vfiovm'] = false;
+                $this->pageData['driver'] = $driver;
             } else {
                 $this->pageData['error'][] = Error::get(Error::VENDOR_UTILITY_NOT_FOUND);
                 $this->pageData["vendor"] = "AMD" ;
                 $this->pageData["name"] = $this->settings['GPUID'] ;
+                $this->pageData['driver'] = $driver;
             }
         } else {
             $this->pageData["vfio"] = true ;
@@ -169,14 +172,16 @@ class AMD extends Main
             $this->pageData["vfiochk"] = $this->checkVFIO("0000:".$this->settings['PCIID']) ;
             $this->pageData["vfiochkid"] = $this->settings['PCIID'] ;
             $this->pageData['vfiovm'] = $this->get_gpu_vm($this->settings['PCIID']);
+            $this->pageData['driver'] = $driver;
             $gpus = $this->getInventory() ;
             if ($gpus) {
                 if (isset($gpus[$this->settings['GPUID']])) {
                     $this->pageData['name'] = $gpus[$this->settings['GPUID']]["model"] ;
                 }
             }
-        
+
         }
+        $this->getPCIeBandwidth("0000:".$this->settings['PCIID']);
         return json_encode($this->pageData) ;  
     }
 

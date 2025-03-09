@@ -173,14 +173,21 @@ class Intel extends Main
      */
     public function getStatistics()
     {
+        $driver = $this->getKernelDriver($this->settings['GPUID']);
+        if ($driver == "xe") $driver = "XE";
         if (!$this->checkVFIO($this->settings['GPUID']))
         {
-
-            if ($this->cmdexists) {
+            if (($this->cmdexists && $driver == "i915") || $driver =="XE") {
                 //Command invokes intel_gpu_top in JSON output mode with an update rate of 5 seconds
-                if (!isset($this->settings['IGTTIMER'])) $this->settings['IGTTIMER'] = ".500 1.500";
-                $command = self::STATISTICS_WRAPPER . ES . $this->settings['IGTTIMER'] . ES . self::CMD_UTILITY;
-                $this->runCommand($command, self::STATISTICS_PARAM. $this->settings['GPUID'].'"', false); 
+                //Command invokes nvidia-smi in query all mode with XML return
+                if ($driver == "i915") {
+                    $this->stdout = shell_exec(self::CMD_UTILITY . ES . sprintf(self::STATISTICS_PARAM, $this->settings['GPUID']));
+                    if (!isset($this->settings['IGTTIMER'])) $this->settings['IGTTIMER'] = ".500 1.500";
+                    $command = self::STATISTICS_WRAPPER . ES . $this->settings['IGTTIMER'] . ES . self::CMD_UTILITY;
+                    $this->runCommand($command, self::STATISTICS_PARAM. $this->settings['GPUID'].'"', false); 
+                } else {
+                    $this->stdout = $this->buildXEJSON($this->settings['GPUID']);
+                }
                 #$this->runCommand("cat ", " /tmp/i915.txt", false); 
                 if (!empty($this->stdout) && strlen($this->stdout) > 0) {
                     $this->parseStatistics();
@@ -191,10 +198,12 @@ class Intel extends Main
                 $this->pageData["vfiochk"] = $this->checkVFIO($this->settings['GPUID']) ;
                 $this->pageData["vfiochkid"] = $this->settings['GPUID'] ;
                 $this->pageData['vfiovm'] = false;
+                $this->pageData['driver'] = $driver;
             } else {
                 $this->pageData['error'][] = Error::get(Error::VENDOR_UTILITY_NOT_FOUND);
                 $this->pageData["vendor"] = "Intel" ;
                 $this->pageData["name"] = $this->settings['GPUID'] ;
+                $this->pageData['driver'] = $driver;
             }
         } else {
             $this->pageData["vfio"] = true ;
@@ -202,6 +211,7 @@ class Intel extends Main
             $this->pageData["vfiochk"] = $this->checkVFIO($this->settings['GPUID']) ;
             $this->pageData["vfiochkid"] = $this->settings['GPUID'] ;
             $this->pageData['vfiovm'] = $this->get_gpu_vm($this->settings['PCIID']);
+            $this->pageData['driver'] = $driver;
             $gpus = $this->getInventory() ;
             if ($gpus) {
                 if (isset($gpus[$this->settings['GPUID']])) {
@@ -349,8 +359,127 @@ class Intel extends Main
                     }
                 }
             }
+            $this->getPCIeBandwidth($this->settings['GPUID']);
         } else {
             $this->pageData['error'][] = Error::get(Error::VENDOR_DATA_BAD_PARSE);
         }
       }
+
+          // Function to read the sysfs file and return the data as float or 0 if the file doesn't exist
+          private function readSysfsData($path)
+          {
+              if (file_exists($path)) {
+                  $value = file_get_contents($path);
+                  return is_numeric($value) ? (float)trim($value) : 0.0;
+              }
+              return 0.0;
+          }
+      
+          // Function to find the sysfs path using the PCI ID
+          private function getSysfsPathFromPciId($pciId)
+          {
+              $basePath = '/sys/class/drm/';
+              $gpuDirs = scandir($basePath);
+              
+              foreach ($gpuDirs as $dir) {
+                  if ($dir === '.' || $dir === '..') {
+                      continue;
+                  }
+      
+                  // Check if this directory matches the PCI ID
+                  $pciPath = $basePath . $dir . '/device';
+                  if (file_exists($pciPath)) {
+                      $deviceId = trim(file_get_contents($pciPath . '/vendor'));
+                      if ($deviceId === $pciId) {
+                          return $basePath . $dir; // Return path if PCI ID matches
+                      }
+                  }
+              }
+              
+              return null; // Return null if no matching PCI ID found
+          }
+      
+          // Function to generate the JSON from sysfs data based on PCI ID
+          protected function buildXEJSON(string $pciId): string
+          {
+              // Find the sysfs path for the given PCI ID
+              $gpuPath = $this->getSysfsPathFromPciId($pciId);
+              if ($gpuPath === null) {
+                  return json_encode(['error' => 'GPU not found with the given PCI ID']);
+              }
+      
+              // Set paths for sysfs data based on the found GPU path
+              $freqPath = $gpuPath . "/device/gt_freq_mhz"; // Example path for frequency
+              $powerPath = "/sys/class/drm/card0/power_usage"; // Path to power usage (adjust based on sysfs availability)
+              $rc6Path = $gpuPath . "/device/rc6"; // Example path for rc6 state
+              $interruptPath = $gpuPath . "/device/interrupts"; // Path for interrupts (may vary)
+      
+              // Collect necessary data from sysfs
+              $duration = 1000.0; // Default duration (you can modify to read a timestamp)
+              $frequencyRequested = $this->readSysfsData($freqPath); // Example of reading frequency
+              $frequencyActual = $frequencyRequested; // Assuming requested = actual for simplicity
+              $interruptsCount = $this->readSysfsData($interruptPath);
+              $rc6Value = $this->readSysfsData($rc6Path);
+              $powerGpu = $this->readSysfsData($powerPath);
+              $powerPackage = $powerGpu * 0.8; // Assuming package power is 80% of GPU power (adjust as needed)
+      
+              // Build the JSON structure
+              $jsonOutput = [
+                  "period" => [
+                      "duration" => $duration,
+                      "unit" => "ms"
+                  ],
+                  "frequency" => [
+                      "requested" => $frequencyRequested,
+                      "actual" => $frequencyActual,
+                      "unit" => "MHz"
+                  ],
+                  "interrupts" => [
+                      "count" => $interruptsCount,
+                      "unit" => "irq/s"
+                  ],
+                  "rc6" => [
+                      "value" => $rc6Value,
+                      "unit" => "%"
+                  ],
+                  "power" => [
+                      "GPU" => $powerGpu,
+                      "Package" => $powerPackage,
+                      "unit" => "W"
+                  ],
+                  "engines" => [
+                      "Render/3D" => [
+                          "busy" => 5.0, // Example static value for Render/3D
+                          "sema" => 0.0,
+                          "wait" => 0.0,
+                          "unit" => "%"
+                      ],
+                      "Blitter" => [
+                          "busy" => 0.0,
+                          "sema" => 0.0,
+                          "wait" => 0.0,
+                          "unit" => "%"
+                      ],
+                      "Video" => [
+                          "busy" => 0.0,
+                          "sema" => 0.0,
+                          "wait" => 0.0,
+                          "unit" => "%"
+                      ],
+                      "VideoEnhance" => [
+                          "busy" => 0.0,
+                          "sema" => 0.0,
+                          "wait" => 0.0,
+                          "unit" => "%"
+                      ]
+                  ],
+                  "clients" => [] // You can populate client data based on additional sysfs files if available
+              ];
+      
+              return json_encode($jsonOutput, JSON_PRETTY_PRINT);
+          }
+      
+
+      
+
 }

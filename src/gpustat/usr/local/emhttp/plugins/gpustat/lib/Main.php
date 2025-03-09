@@ -93,6 +93,11 @@ class Main
             'temp'      => 'N/A',
             'tempmax'   => 'N/A',
             'util'      => 'N/A',
+            'pciegen'       => 'N/A',
+            'pciegenmax'    => 'N/A',
+            'pciewidth'     => 'N/A',
+            'pciewidthmax'  => 'N/A',
+            'igpu' => "",
         ];
     }
 
@@ -129,6 +134,62 @@ class Main
         $files = scandir("/sys/bus/pci/drivers/vfio-pci/") ;
         if ($files) $vfio = in_array($pciid, $files) ; else $vfio = $files ;
         return $vfio ;
+    }
+
+    /**
+     * Checks get kernel driver.
+     *
+     * @param string $pciid
+     * @return string $driver
+     */
+    protected function getKernelDriver(string $pciid) {
+        $driver = '';
+        if (is_link('/sys/bus/pci/devices/'.$pciid.'/driver')) {
+            $strLink = @readlink('/sys/bus/pci/devices/'.$pciid.'/driver');
+            if (!empty($strLink)) {
+                $driver = basename($strLink);
+            }
+        }
+        return $driver;
+    }
+
+    /**
+     * Checks get PCIe bandwidth.
+     *
+     * @param string $pciid
+     * 
+     */
+    protected function getPCIeBandwidth(string $pciid) {
+        $sysfs_path = "/sys/bus/pci/devices/$pciid";
+        
+        if (file_exists("$sysfs_path/max_link_speed") && file_exists("$sysfs_path/max_link_width")) {
+            $pciegen = trim(file_get_contents("$sysfs_path/max_link_speed"));
+            $this->pageData['pciegen'] = $this->get_pcie_gen($pciegen);
+            $pciegenmax = file_exists("$sysfs_path/current_link_speed") ? trim(file_get_contents("$sysfs_path/current_link_speed")) : "N/A";
+            $this->pageData['pciegenmax'] = $this->get_pcie_gen($pciegenmax);
+            $this->pageData['pciewidthmax'] = trim(file_get_contents("$sysfs_path/max_link_width"));
+            $this->pageData['pciewidth'] = file_exists("$sysfs_path/current_link_width") ? trim(file_get_contents("$sysfs_path/current_link_width")) : "N/A";  
+            $this->pageData['igpu'] = (strpos($pciid, "0000:00:") === 0) ? "1" : "0";
+        }  
+    }
+
+    /**
+    * Checks get PCIe gen.
+    *
+    * @param string $speed
+    * @return int gen.
+    */
+    protected function get_pcie_gen($speed) {
+        $speed=trim($speed);
+        $speed_map = [
+            "2.5 GT/s PCIe" => 1,
+            "5.0 GT/s PCIe" => 2,
+            "8.0 GT/s PCIe" => 3,
+            "16.0 GT/s PCIe" => 4,
+            "32.0 GT/s PCIe" => 5,
+            "64.0 GT/s PCIe" => 6
+        ];
+        return $speed_map[$speed] ?? $speed;
     }
 
     /**
@@ -170,12 +231,7 @@ class Main
             }
           }
 
-          # var_dump($output);
-           // Check if the output contains the PCI device ID
-
-
-
-       
+        $vmpcilist = array();
         $doms = explode("\n",shell_exec("virsh list --name"));      
         for ($i = 0; $i < sizeof($doms); $i++) {
             if ($doms[$i] == "") continue;
@@ -187,14 +243,17 @@ class Main
                   // Extract the PCI device ID
                   $pciDeviceID = $matches[1];
                   if ($pciDeviceID == "1b36:0100") continue;
-                  $pciid = $lspci[$pciDeviceID]["pciid"];
-                  $vmpcilist[$pciid] = $name;
+                  if (isset($lspci[$pciDeviceID]["pciid"])) {
+                    $pciid = $lspci[$pciDeviceID]["pciid"];
+                    $vmpcilist[$pciid] = $name;
+                  }
               }
             }
         }
 
         #GetIcon
         global $docroot;
+        if (array_key_exists($vmpciid,$vmpcilist)) {
         $strIcon = '/plugins/dynamix.vm.manager/templates/images/default.png';
         $strIconGet = shell_exec("virsh dumpxml '".$vmpcilist[$vmpciid]."' --xpath \"//domain/metadata/*[local-name()='vmtemplate']/@icon\"");
         preg_match('/icon="([^"]+)"/', $strIconGet, $matches);
@@ -206,8 +265,9 @@ class Main
         } elseif (is_file("$docroot/boot/config/plugins/dynamix.vm.manager/templates/images/" . $strIcon)) {
             $strIcon = '/boot/config/plugins/dynamix.vm.manager/templates/images/' . $strIcon;
         }
+    }
         return isset($vmpcilist[$vmpciid]) ? $vmpcilist[$vmpciid].','.$strIcon : false;
-      }
+    }
 
     /**
      * Retrieves the full command with arguments for a given process ID
@@ -226,13 +286,12 @@ class Main
 
         return $command;
     }
-
-    /**
-     * Retrieves the full command of a parent process with arguments for a given process ID
-     *
-     * @param int $pid
-     * @return string
-     */
+    /*
+    * Retrieves the full command of a parent process with arguments for a given process ID
+    *
+    * @param int $pid
+    * @return string
+    */
     protected function getParentCommand(int $pid): string
     {
         $command = '';
@@ -245,19 +304,34 @@ class Main
 
         return $command;
     }
-
-    protected function getParentCommandIntel(int $pid): string
-    {
-        $command = '';
-        $pid_command = 'ps -o ppid= '.$pid;
-
-        $ppid = (int)trim(shell_exec($pid_command));
-        if ($ppid > 0) {
-            $command = $this->getFullCommand($ppid);
-        }
-
-        return $command;
+    
+    /**
+    * Retrieves sysfs files or defaults if no file
+    *
+    * @return 
+    */
+    protected function get_value($path, $default = "N/A") {
+        return file_exists($path) ? trim(file_get_contents($path)) : $default;
     }
+
+    /**
+    * Retrieves hwmon path.
+    *
+    * @return mixed
+    */
+    protected function find_hwmon_path($pci_id) {
+        $hwmon_base = "/sys/class/hwmon/";
+        foreach (glob("$hwmon_base/hwmon*") as $hwmon) {
+            if (file_exists("$hwmon/device")) {
+                $device_real_path = realpath("$hwmon/device");
+                if (strpos($device_real_path, $pci_id) !== false) {
+                    return $hwmon;
+                }
+            }
+        }
+        return null;
+    }
+
     /**
      * Retrieves plugin settings and returns them or defaults if no file
      *
