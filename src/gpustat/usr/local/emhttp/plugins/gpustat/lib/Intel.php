@@ -427,6 +427,12 @@ class Intel extends Main
         #$rc6Value = $this->readSysfsData($rc6Path) / 10.0; // Convert to percentage if needed
         #$powerGpu = $this->readSysfsData($powerPath) / 1e6; // Convert µW to W
         #$powerPackage = $powerGpu * 0.8; // Approximate package power
+        $frequencyRequested = null;
+        $frequencyActual = null;
+        $interruptsCount = null;
+        $rc6Value = null; // Convert to percentage if needed
+        $powerGpu = null; // Convert µW to W
+        $powerPackage = null; // Approximate package power
 
         $clientsPath = "/sys/kernel/debug/dri/$pciId/clients";
         $clients = [];
