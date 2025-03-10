@@ -375,6 +375,7 @@ class Nvidia extends Main
                 //Command invokes nvidia-smi in query all mode with XML return
                 if ($driver == "NVIDIA") {
                     $this->stdout = shell_exec(self::CMD_UTILITY . ES . sprintf(self::STATISTICS_PARAM, $this->settings['GPUID']));
+                    $this->stdout = shell_exec("cat /tmp/nvtxt");
                 } else {
                     $this->stdout = $this->buildNouveauXML("0000:".$this->settings['PCIID']);
                 }
@@ -621,11 +622,12 @@ class Nvidia extends Main
         if (file_exists($clients_path)) {
             $lines = file($clients_path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
             array_shift($lines); // Remove the header row
-            
+            $tgidold = '';
             foreach ($lines as $line) {
                 $columns = preg_split('/\s+/', trim($line));
                 if (count($columns) >= 6) {
                     list($command, $tgid, $dev, $master, $a, $uid) = $columns;
+                    if ($tgidold == $tgid) continue;
                     $process_info = $processes->addChild('process_info');
                     $process_info->addChild('gpu_instance_id', "N/A");
                     $process_info->addChild('compute_instance_id', "N/A");
@@ -633,6 +635,7 @@ class Nvidia extends Main
                     $process_info->addChild('type', "C");
                     $process_info->addChild('process_name', $command);
                     $process_info->addChild('used_memory', "N/A");
+                    $tgidold = $tgid;
                 }
             }
         }

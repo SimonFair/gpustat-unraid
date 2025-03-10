@@ -85,7 +85,7 @@ foreach ($multigpus as $id=>$gpu) {
         if ($gpu_nv || $gpu_amd) {
         if ($gpustat_cfg['DISPTEMP']) $stats .= "<span class='vfio_notinuse$i'> Temperature: <span class='gpu-temp{$i}'></span></span>" ;
     }
-    if (($gpu_nv || $gpu_intel) && $gpustat_cfg['DISPSESSIONS']) $stats .="<span class='vfio_notinuse$i'> Processes: <span class='gpu-sessions{$i}'></span></span>";
+    if ($gpustat_cfg['DISPSESSIONS']) $stats .="<span class='vfio_notinuse$i'> Processes: <span class='gpu-sessions{$i}'></span></span>";
     $stats .= "<br><br></div>" ;
     $layout = GPULayout($i, $gpu["vendor"],$gpustat_cfg) ;
     $mytiles[$pluginname.$k]['column'.$j] =
@@ -376,6 +376,16 @@ $gpu_nv = $gpu_intel = $gpu_amd = $gpu_unknown = false;
             $page_render .= "<span class='gpu-memclockbar$count' id='gpu-memclockbar$count'></span><span></span></div></span>" ;
         $page_render .=    "</td></tr>" ;
         }
+
+        if($gpustat_cfg['DISPSESSIONS']) {
+            $page_render .= "<tr class='vfio_notinuse$count'><td colspan ='2' ><span class='w36'><i class='ups fa fa-fw icon-hardware'></i>_(Active Apps)_</span>" ;
+            foreach($apps as $app) {
+                $page_render .= "<span id='w16 gpu-img-span-$app$count' class='gpu-img-span gpu-img-span-$app$count'>" ;
+                $page_render .= "<img id='gpu-$app$count' class='gpu-image' src='/plugins/gpustat/images/$app.png' style='max-width: 18px; max-height: 18px; width: auto; height: auto; object-fit: contain;'>" ;
+                $page_render .= "</span>" ;
+            }
+        $page_render .= "</td></tr>" ;
+        }   
     }
 
     return($page_render) ;    

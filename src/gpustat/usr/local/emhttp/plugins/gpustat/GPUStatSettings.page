@@ -215,6 +215,12 @@ Fan Usage (Nvidia/AMD**):
     <?=mk_option($gpustat_cfg['DISPFAN'], "1", "Yes");?>
   </select>
 
+Active Sessions (Nvidia/Intel/AMD):
+: <select id="DISPSESSIONS" name="DISPSESSIONS" size="1">
+    <?=mk_option($gpustat_cfg['DISPSESSIONS'], "0", "No");?>
+    <?=mk_option($gpustat_cfg['DISPSESSIONS'], "1", "Yes");?>
+  </select>
+
 <h4><b>Nvidia Specific</b></h4>
 
 Encoder / Decoder Utilization:
@@ -229,11 +235,6 @@ Throttle Status:
     <?=mk_option($gpustat_cfg['DISPTHROTTLE'], "1", "Yes");?>
   </select>
 
-Active Sessions:
-: <select id="DISPSESSIONS" name="DISPSESSIONS" size="1">
-    <?=mk_option($gpustat_cfg['DISPSESSIONS'], "0", "No");?>
-    <?=mk_option($gpustat_cfg['DISPSESSIONS'], "1", "Yes");?>
-  </select>
 
 <h4><b>Intel Specific</b></h4>
 
