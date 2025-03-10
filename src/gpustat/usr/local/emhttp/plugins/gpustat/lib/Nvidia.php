@@ -601,8 +601,8 @@ class Nvidia extends Main
         $power->addChild('max_power_limit', "31.32 W");
         
         $clocks = $gpu->addChild('clocks');
-        $clocks->addChild('graphics_clock', "420 MHz");
-        $clocks->addChild('mem_clock', "5000 MHz");
+        $clocks->addChild('graphics_clock', "0 MHz");
+        $clocks->addChild('mem_clock', "0 MHz");
         
         $max_clocks = $gpu->addChild('max_clocks');
         $max_clocks->addChild('graphics_clock', "2100 MHz");
