@@ -549,7 +549,7 @@ class Nvidia extends Main
 
         $gpu = $xml->addChild('gpu');
         $gpu->addAttribute('id', $pci_id);
-        $gpu->addChild('product_name', $this->get_value("$gpu_path/vendor") . " GPU");
+        $gpu->addChild('product_name', $this->get_gpu_name($pci_id));
         $gpu->addChild('uuid', "GPU-" . md5($pci_id));
         
         $pci = $gpu->addChild('pci');
@@ -647,5 +647,15 @@ class Nvidia extends Main
             #echo $dom->saveXML();
             file_put_contents("/tmp/nvnouvxml",$dom->saveXML());
             return $dom->saveXML();
+        }
+
+        protected function get_gpu_name($pciid) {
+            $input = shell_exec("udevadm info query -p  /sys/bus/pci/devices/$pciid  | grep ID_MODEL") ;
+            if (preg_match('/^E:\s*([^=]+)=(.*?)\s*\[(.*?)\]\s*$/', $input, $matches)) {
+                return  trim($matches[3]);
+            } elseif (preg_match('/^E:\s*([^=]+)=(.*?)$/', $input, $matches)) {
+                return trim($matches[2]);
+            }
+            return _("Unknown");
         }
 }

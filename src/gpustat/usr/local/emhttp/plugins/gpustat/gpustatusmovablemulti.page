@@ -132,15 +132,17 @@ $gpu_nv = $gpu_intel = $gpu_amd = $gpu_unknown = false;
 }
 
     $page_render = '<tr class="updated"><td>' ;
-    $page_render .= "<span><span class='gpu-vendor$count w18'></span><span class='gpu-driver$count w18'></span></span>&nbsp;<span class='gpu-name$count w18'></span>" ;
+    $page_render .= "<span><span class='gpu-vendor$count w18'></span><span class='gpu-driver$count w18'></span></span>&nbsp;<span class='gpu-name$count w18'></span></td></td>" ;
 
     # No GPU Set 
 
     if ($gpu_unknown)  $page_render .= "<tr><td><span>_(No GPUs selected - Select GPU(s) in GPUStat settings page and apply.)_</span></td></tr>" ; 
 
     if($gpustat_cfg['DISPPCIUTIL']) {
-        $page_render .= "<br><span class='nopcie$count' id='gpu-pciegen$count'>PCIe Gen (Max): <span class='gpu-pciegen$count '></span>&nbsp;(<span class='gpu-pciegenmax$count '></span>)</span>" ;
-        $page_render .= "&emsp;&ensp;<span class=' nopcie$count' id='gpu-pciewidth$count'>Lanes (Max): <span class='gpu-pciewidth$count '></span>&nbsp;(<span class='gpu-pciewidthmax$count '></span>)</span>" ;
+        $page_render .= "<tr class='nopcie$count'><td><span class='w36'><i class='ups fa fa-fw icon-hardware'></i>_(PCI Bus Utilization)_</span>" ;
+        $page_render .= "<span class='nopcie$count' id='gpu-pciegen$count'>PCIe Gen (Max): <span class='gpu-pciegen$count '></span>&nbsp;(<span class='gpu-pciegenmax$count '></span>)</span>" ;
+        $page_render .= "<span class=' nopcie$count' id='gpu-pciewidth$count'>Lanes (Max): <span class='gpu-pciewidth$count '></span>&nbsp;(<span class='gpu-pciewidthmax$count '></span>)</span>" ;
+                    $page_render .= "</td></tr>" ;
     }
 
     # Nvidia GPUs
