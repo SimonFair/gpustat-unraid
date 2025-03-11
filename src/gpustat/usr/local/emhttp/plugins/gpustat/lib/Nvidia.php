@@ -375,7 +375,7 @@ class Nvidia extends Main
                 //Command invokes nvidia-smi in query all mode with XML return
                 if ($driver == "NVIDIA") {
                     $this->stdout = shell_exec(self::CMD_UTILITY . ES . sprintf(self::STATISTICS_PARAM, $this->settings['GPUID']));
-                    $this->stdout = shell_exec("cat /tmp/nvtxt");
+                    #$this->stdout = shell_exec("cat /tmp/nvtxt");
                 } else {
                     $this->stdout = $this->buildNouveauXML("0000:".$this->settings['PCIID']);
                 }
