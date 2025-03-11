@@ -59,7 +59,35 @@ class AMD extends Main
         'uvd'   => ['uvd'],
         'vce0'  => ['vce'],
     ];
+    const SUPPORTED_APPS = [ // Order here is important because some apps use the same binaries -- order should be more specific to less
+        'plex'        => ['Plex Transcoder'],
+        'jellyfin'    => ['ffmpeg','jellyfin'],
+        'handbrake'   => ['/usr/bin/HandBrakeCLI'],
+        'emby'        => ['ffmpeg', 'EmbyServer'],
+        'tdarr'       => ['ffmpeg', 'HandbrakeCLI'],
+        'unmanic'     => ['ffmpeg'],
+        'dizquetv'    => ['ffmpeg'],
+        'ersatztv'    => ['ffmpeg'],
+        'fileflows'   => ['ffmpeg'],
+        'frigate'     => ['ffmpeg'],
+        'threadfin'   => ['ffmpeg','Threadfin'],
+        'tunarr'      => ['ffmpeg','tunarr'],
+        'codeproject' => ['python3.8'],
+        'deepstack'   => ['python3'],
+        'nsfminer'    => ['nsfminer'],
+        'shinobipro'  => ['shinobi'],
+        'foldinghome' => ['FahCore'],
+        'compreface'  => ['uwsgi'],
+        'ollama'      => ['ollama_llama_server'],
+        'immich'      => ['immich'],
+        'localai'     => ['localai'],
+        'chia'        => ['chia'],
+        'mmx'         => ['mmx_node'],
+        'subspace'    => ['subspace'],
+        'xorg'        => ['Xorg'],
+        'qemu'        => ['qemu'],
 
+    ];
     const TEMP_UTILITY = 'sensors';
     const TEMP_PARAM = '-j 2>errors';
 
@@ -72,7 +100,59 @@ class AMD extends Main
         $settings += ['cmd' => self::CMD_UTILITY];
         parent::__construct($settings);
     }
-
+    
+        /**
+     * Iterates supported applications and their respective commands to match against processes using GPU hardware
+     *
+     * @param array $process
+     */
+    private function detectApplication (array $process)
+    {
+        $debug_apps = is_file("/tmp/gpustatapps") ?? false;
+        if ($debug_apps) file_put_contents("/tmp/gpuappsint","");
+        foreach (self::SUPPORTED_APPS as $app => $commands) {
+            foreach ($commands as $command) {
+                if (strpos($process['name'], $command) !== false) {
+                    // For Handbrake/ffmpeg: arguments tell us which application called it
+                    if (in_array($command, ['ffmpeg', 'HandbrakeCLI', 'python3.8','python3'])) {
+                        if (isset($process['pid'])) {
+                            $pid_info = $this->getFullCommand((int) $process['pid']);
+                            if ($debug_apps) file_put_contents("/tmp/gpuappsint","$command\n$pid_info\n",FILE_APPEND);
+                            if (!empty($pid_info) && strlen($pid_info) > 0) {
+                                if ($command === 'python3.8') {
+                                    // CodeProject doesn't have any signifier in the full command output
+                                    if (strpos($pid_info, '/ObjectDetectionYolo/detect_adapter.py') === false) {
+                                        continue 2;
+                                    }
+                                } elseif ($command === 'python3') {
+                                    // Deepstack doesn't have any signifier in the full command output
+                                    if (strpos($pid_info, '/app/intelligencelayer/shared') === false) {
+                                        continue 2;
+                                    }
+                                } elseif (stripos($pid_info, strtolower($app)) === false) {
+                                    // Try to match the app name in the parent process
+                                    $ppid_info = $this->getParentCommand((int) $process['pid']);
+                                    if ($debug_apps) file_put_contents("/tmp/gpuappsint","$ppid_info\n",FILE_APPEND);
+                                    if (stripos($ppid_info, $app) === false) {
+                                        // We didn't match the application name in the arguments, no match
+                                        if ($debug_apps) file_put_contents("/tmp/gpuappsint","not found app $app\n",FILE_APPEND);
+                                        continue 2;
+                                    } else if ($debug_apps) file_put_contents("/tmp/gpuappsint","\nfound app $app\n",FILE_APPEND);
+                                }
+                            }
+                        }
+                    }
+                    $this->pageData[$app . 'using'] = true;
+                    #$this->pageData[$app . 'mem'] += (int)$this->stripText(' MiB', $process->used_memory);
+                    $this->pageData[$app . 'mem'] = 0;
+                    if (isset($this->pageData[$app . 'count'])) $this->pageData[$app . 'count']++; else $this->pageData[$app . 'count'] = 1;
+                    if ($debug_apps) file_put_contents("/tmp/gpuappsint","\nfound app $app $command\n",FILE_APPEND);
+                    // If we match a more specific command/app to a process, continue on to the next process
+                    break 2;
+                }
+            }
+        }
+    }
     /**
      * Retrieves AMD inventory using lspci and returns an array
      *
@@ -143,6 +223,7 @@ class AMD extends Main
      */
     public function getStatistics()
     {
+        $driver = strtoupper($this->getKernelDriver("0000:".$this->settings['PCIID']));
         if (!$this->checkVFIO("0000:".$this->settings['PCIID']))
         {
             if ($this->cmdexists) {
@@ -158,10 +239,12 @@ class AMD extends Main
                 $this->pageData["vfiochk"] = $this->checkVFIO("0000:".$this->settings['PCIID']) ;
                 $this->pageData["vfiochkid"] = "0000:".$this->settings['PCIID'] ;
                 $this->pageData['vfiovm'] = false;
+                $this->pageData['driver'] = $driver;
             } else {
                 $this->pageData['error'][] = Error::get(Error::VENDOR_UTILITY_NOT_FOUND);
                 $this->pageData["vendor"] = "AMD" ;
                 $this->pageData["name"] = $this->settings['GPUID'] ;
+                $this->pageData['driver'] = $driver;
             }
         } else {
             $this->pageData["vfio"] = true ;
@@ -169,14 +252,16 @@ class AMD extends Main
             $this->pageData["vfiochk"] = $this->checkVFIO("0000:".$this->settings['PCIID']) ;
             $this->pageData["vfiochkid"] = $this->settings['PCIID'] ;
             $this->pageData['vfiovm'] = $this->get_gpu_vm($this->settings['PCIID']);
+            $this->pageData['driver'] = $driver;
             $gpus = $this->getInventory() ;
             if ($gpus) {
                 if (isset($gpus[$this->settings['GPUID']])) {
                     $this->pageData['name'] = $gpus[$this->settings['GPUID']]["model"] ;
                 }
             }
-        
+
         }
+        $this->getPCIeBandwidth("0000:".$this->settings['PCIID']);
         return json_encode($this->pageData) ;  
     }
 
@@ -294,6 +379,43 @@ class AMD extends Main
             $this->pageData['error'][] = Error::get(Error::VENDOR_DATA_NOT_ENOUGH, "Count: $count");
         }
         $this->pageData = array_merge($this->pageData, $this->getSensorData());
+
+        if ($this->settings['DISPSESSIONS']) {
+            $this->pageData['appssupp'] = array_keys(self::SUPPORTED_APPS);
+            $clientsPath = "/sys/kernel/debug/dri/0000:{$this->settings['PCIID']}/clients";
+            $clients = [];
+    
+            if (file_exists($clientsPath)) {
+                $lines = file($clientsPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+                array_shift($lines); // Remove the header row
+    
+                foreach ($lines as $line) {
+                    $columns = preg_split('/\s+/', trim($line));
+                    if (count($columns) >= 6) {
+                        list($command, $tgid, $dev, $master, $a, $uid) = $columns;
+                        $clients[$tgid] = [
+                            "name" => $command,
+                            "pid" => $tgid,
+                            "gpu_instance_id" => "N/A",
+                            "compute_instance_id" => "N/A",
+                            "type" => "C",
+                            "used_memory" => "N/A"
+                        ];
+                    }
+                }
+            }
+            $this->pageData['sessions'] = 0;
+            if (isset($clients) && count($clients) > 0) {
+                $this->pageData['sessions'] = count($clients);
+                if ($this->pageData['sessions'] > 0) {
+                    foreach ($clients as $id => $process) {
+                        if (isset($process["name"])) {
+                            $this->detectApplication($process);
+                        }
+                    }
+                }
+            }
+        }
 
         $gpus = $this->getInventory() ;
         if ($gpus) {

@@ -369,10 +369,16 @@ class Nvidia extends Main
      */
     public function getStatistics()
     {
+        $driver = strtoupper($this->getKernelDriver("0000:".$this->settings['PCIID']));
         if (!$this->checkVFIO("0000:".$this->settings['PCIID'])) {
-            if ($this->cmdexists) {
+            if (($this->cmdexists && $driver == "NVIDIA") || $driver =="NOUVEAU") {
                 //Command invokes nvidia-smi in query all mode with XML return
-                $this->stdout = shell_exec(self::CMD_UTILITY . ES . sprintf(self::STATISTICS_PARAM, $this->settings['GPUID']));
+                if ($driver == "NVIDIA") {
+                    $this->stdout = shell_exec(self::CMD_UTILITY . ES . sprintf(self::STATISTICS_PARAM, $this->settings['GPUID']));
+                    $this->stdout = shell_exec("cat /tmp/nvtxt");
+                } else {
+                    $this->stdout = $this->buildNouveauXML("0000:".$this->settings['PCIID']);
+                }
                 #$this->stdout = shell_exec("cat /tmp/nv" );
                 if (!empty($this->stdout) && strlen($this->stdout) > 0) {
                     $this->parseStatistics();
@@ -384,6 +390,7 @@ class Nvidia extends Main
                 $this->pageData['error'][] = Error::get(Error::VENDOR_UTILITY_NOT_FOUND);
                 $this->pageData["vendor"] = "Nvidia" ;
                 $this->pageData["name"] = "GPU is an Nvidia" ;
+                $this->pageData['driver'] = $driver;
                 $gpus = $this->getPCIInventory() ;
                 if ($gpus) {
                     if (isset($gpus["0000:".$this->settings['PCIID']])) {
@@ -395,13 +402,14 @@ class Nvidia extends Main
             $this->pageData["vfiochk"] = $this->checkVFIO("0000:".$this->settings['PCIID']) ;
             $this->pageData["vfiochkid"] = "0000:".$this->settings['PCIID'] ;
             $this->pageData['vfiovm'] = false;
-            
+            $this->pageData['driver'] = $driver;
         } else {
             $this->pageData["vfio"] = true ;
             $this->pageData["vendor"] = "Nvidia" ;
             $this->pageData["vfiochk"] = $this->checkVFIO("0000:".$this->settings['PCIID']) ;
             $this->pageData["vfiochkid"] = $this->settings['PCIID'] ;
             $this->pageData['vfiovm'] = $this->get_gpu_vm($this->settings['PCIID']);
+            $this->pageData['driver'] = $driver;
             $gpus = $this->getPCIInventory() ;
             if ($gpus) {
                 if (isset($gpus[$this->settings['GPUID']])) {
@@ -410,6 +418,7 @@ class Nvidia extends Main
             }
 
         }
+        $this->pageData['igpu'] = (strpos("0000:".$this->settings['PCIID'], "0000:00:") === 0) ? "1" : "0";
         return json_encode($this->pageData) ;
     }
 
@@ -465,10 +474,6 @@ class Nvidia extends Main
                 'perfstate'     => 'N/A',
                 'throttled'     => 'N/A',
                 'thrtlrsn'      => '',
-                'pciegen'       => 'N/A',
-                'pciegenmax'    => 'N/A',
-                'pciewidth'     => 'N/A',
-                'pciewidthmax'  => 'N/A',
                 'sessions'      => 0,
                 'uuid'          => 'N/A',
             ];
@@ -522,4 +527,135 @@ class Nvidia extends Main
             $this->pageData['error'][] = Error::get(Error::VENDOR_DATA_BAD_PARSE);
         }
     }
+       /**
+     * Retrieves the full command with arguments for a given process ID
+     *
+     * @param int $pid
+     * @return string
+     */
+    protected function buildNouveauXML(string $pci_id): string
+    {
+
+        $gpu_path = "/sys/bus/pci/devices/$pci_id/";
+        $debugfs_path = "/sys/kernel/debug/dri/$pci_id/";
+        $clients_path = "/sys/kernel/debug/dri/$pci_id/clients";
+        $hwmon_path = $this->find_hwmon_path($pci_id);
+
+        $xml = new \SimpleXMLElement("<?xml version='1.0' encoding='UTF-8'?><nvidia_smi_log></nvidia_smi_log>");
+        $xml->addChild('timestamp', date('r'));
+        $xml->addChild('driver_version', $this->get_value("/sys/module/nouveau/version", "Nouveau"));
+        $xml->addChild('cuda_version', "N/A");
+        $xml->addChild('attached_gpus', "1");
+
+        $gpu = $xml->addChild('gpu');
+        $gpu->addAttribute('id', $pci_id);
+        $gpu->addChild('product_name', $this->get_gpu_name($pci_id));
+        $gpu->addChild('uuid', "GPU-" . md5($pci_id));
+        
+        $pci = $gpu->addChild('pci');
+        $gpu_link_info = $pci->addChild('pci_gpu_link_info');
+        $pcie_gen = $gpu_link_info->addChild('pcie_gen');
+        $pcie_gen->addChild('max_link_gen', $this->get_value("$gpu_path/max_link_speed"));
+        $pcie_gen->addChild('current_link_gen', $this->get_value("$gpu_path/current_link_speed"));
+        
+        $link_widths = $gpu_link_info->addChild('link_widths');
+        $link_widths->addChild('max_link_width', $this->get_value("$gpu_path/max_link_width") . "x");
+        $link_widths->addChild('current_link_width', $this->get_value("$gpu_path/current_link_width") . "x");
+        
+        $pci->addChild('tx_util', "300 KB/s");
+        $pci->addChild('rx_util', "300 KB/s");
+        
+        $gpu->addChild('fan_speed', "33 %");
+        $gpu->addChild('performance_state', "P0");
+        
+        $clocks_event = $gpu->addChild('clocks_event_reasons');
+        $events = ["gpu_idle", "applications_clocks_setting", "sw_power_cap", "hw_slowdown", "hw_thermal_slowdown", "hw_power_brake_slowdown", "sync_boost", "sw_thermal_slowdown", "display_clocks_setting"];
+        foreach ($events as $event) {
+            $clocks_event->addChild("clocks_event_reason_$event", "Not Active");
+        }
+        
+        $fb_memory = $gpu->addChild('fb_memory_usage');
+        $fb_memory->addChild('total', "2048 MiB");
+        $fb_memory->addChild('used', "1 MiB");
+        $fb_memory->addChild('free', "1681 MiB");
+        
+        $utilization = $gpu->addChild('utilization');
+        $utilization->addChild('gpu_util', "0 %");
+        $utilization->addChild('memory_util', "0 %");
+        $utilization->addChild('encoder_util', "0 %");
+        $utilization->addChild('decoder_util', "0 %");
+        
+       
+        $gpu_target_temp = $gpu->addChild('supported_gpu_target_temp');
+        $gpu_target_temp->addChild('gpu_target_temp_min', "65 C");
+        $gpu_target_temp->addChild('gpu_target_temp_max', "91 C");
+        
+        $power = $gpu->addChild('gpu_power_readings');
+        $power->addChild('power_state', "P0");
+        $power->addChild('average_power_draw', "N/A");
+        $power->addChild('instant_power_draw', "N/A");
+        $power->addChild('current_power_limit', "31.32 W");
+        $power->addChild('requested_power_limit', "31.32 W");
+        $power->addChild('default_power_limit', "31.32 W");
+        $power->addChild('min_power_limit', "20.00 W");
+        $power->addChild('max_power_limit', "31.32 W");
+        
+        $clocks = $gpu->addChild('clocks');
+        $clocks->addChild('graphics_clock', "0 MHz");
+        $clocks->addChild('mem_clock', "0 MHz");
+        
+        $max_clocks = $gpu->addChild('max_clocks');
+        $max_clocks->addChild('graphics_clock', "2100 MHz");
+        $max_clocks->addChild('mem_clock', "5001 MHz");
+        
+        $fan_speed = $hwmon_path ? $this->get_value("$hwmon_path/pwm1", "N/A") . " %" : "N/A";
+        $gpu->addChild('fan_speed', $fan_speed);
+        $gpu->addChild('performance_state', "P0");
+        
+        $temperature = $gpu->addChild('temperature');
+        $gpu_temp = $hwmon_path ? ($this->get_value("$hwmon_path/temp1_input", "N/A") / 1000) . " C" : "N/A";
+        $temperature->addChild('gpu_temp', $gpu_temp);
+        $temperature->addChild('gpu_temp_max_threshold', "101 C");
+        
+        // Add process clients
+        $processes = $gpu->addChild('processes');
+        if (file_exists($clients_path)) {
+            $lines = file($clients_path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            array_shift($lines); // Remove the header row
+            $tgidold = '';
+            foreach ($lines as $line) {
+                $columns = preg_split('/\s+/', trim($line));
+                if (count($columns) >= 6) {
+                    list($command, $tgid, $dev, $master, $a, $uid) = $columns;
+                    if ($tgidold == $tgid) continue;
+                    $process_info = $processes->addChild('process_info');
+                    $process_info->addChild('gpu_instance_id', "N/A");
+                    $process_info->addChild('compute_instance_id', "N/A");
+                    $process_info->addChild('pid', $tgid);
+                    $process_info->addChild('type', "C");
+                    $process_info->addChild('process_name', $command);
+                    $process_info->addChild('used_memory', "N/A");
+                    $tgidold = $tgid;
+                }
+            }
+        }
+
+            $dom = new \DOMDocument("1.0");
+            $dom->preserveWhiteSpace = false;
+            $dom->formatOutput = true;
+            $dom->loadXML($xml->asXML());
+            #echo $dom->saveXML();
+            file_put_contents("/tmp/nvnouvxml",$dom->saveXML());
+            return $dom->saveXML();
+        }
+
+        protected function get_gpu_name($pciid) {
+            $input = shell_exec("udevadm info query -p  /sys/bus/pci/devices/$pciid  | grep ID_MODEL") ;
+            if (preg_match('/^E:\s*([^=]+)=(.*?)\s*\[(.*?)\]\s*$/', $input, $matches)) {
+                return  trim($matches[3]);
+            } elseif (preg_match('/^E:\s*([^=]+)=(.*?)$/', $input, $matches)) {
+                return trim($matches[2]);
+            }
+            return _("Unknown");
+        }
 }
