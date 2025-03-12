@@ -83,7 +83,7 @@ class Intel extends Main
         /**
      * Iterates supported applications and their respective commands to match against processes using GPU hardware
      *
-     * @param SimpleXMLElement $process
+     * @param array $process
      */
     private function detectApplication (array $process)
     {
@@ -175,6 +175,7 @@ class Intel extends Main
     {
         $driver = $this->getKernelDriver($this->settings['GPUID']);
         if ($driver == "xe") $driver = "XE";
+        if ($driver != "XE" && $driver != "i915") $driver = "i915";
         if (!$this->checkVFIO($this->settings['GPUID']))
         {
             if (($this->cmdexists && $driver == "i915") || $driver =="XE") {

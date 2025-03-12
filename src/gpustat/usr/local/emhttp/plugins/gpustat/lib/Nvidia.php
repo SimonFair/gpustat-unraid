@@ -370,6 +370,7 @@ class Nvidia extends Main
     public function getStatistics()
     {
         $driver = strtoupper($this->getKernelDriver("0000:".$this->settings['PCIID']));
+        if ($driver != "NVIDIA" && $driver != "NOUVEAU") $driver = "NVIDIA";
         if (!$this->checkVFIO("0000:".$this->settings['PCIID'])) {
             if (($this->cmdexists && $driver == "NVIDIA") || $driver =="NOUVEAU") {
                 //Command invokes nvidia-smi in query all mode with XML return
