@@ -142,7 +142,7 @@ class Main
      * @param string $pciid
      * @return string $driver
      */
-    protected function getKernelDriver(string $pciid) {
+    protected function getKernelDriver2(string $pciid) {
         $driver = '';
         if (is_link('/sys/bus/pci/devices/'.$pciid.'/driver')) {
             $strLink = @readlink('/sys/bus/pci/devices/'.$pciid.'/driver');
@@ -151,6 +151,12 @@ class Main
             }
         }
         return $driver;
+    }
+    protected function getKernelDriver(string $pciid): string {
+        $command = "udevadm info --query=property --path=/sys/bus/pci/devices/$pciid | grep 'DRIVER='";
+        $output = shell_exec($command);
+    
+        return $output ? trim(str_replace('DRIVER=', '', $output)) : '';
     }
 
     /**
