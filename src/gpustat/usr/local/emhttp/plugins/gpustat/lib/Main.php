@@ -155,7 +155,6 @@ class Main
     protected function getKernelDriver(string $pciid): string {
         $command = "udevadm info --query=property --path=/sys/bus/pci/devices/$pciid | grep 'DRIVER='";
         $output = shell_exec($command);
-    
         return $output ? trim(str_replace('DRIVER=', '', $output)) : '';
     }
 

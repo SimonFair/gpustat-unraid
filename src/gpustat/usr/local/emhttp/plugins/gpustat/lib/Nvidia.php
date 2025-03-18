@@ -412,6 +412,7 @@ class Nvidia extends Main
             $this->pageData['vfiovm'] = $this->get_gpu_vm($this->settings['PCIID']);
             $this->pageData['driver'] = $driver;
             $gpus = $this->getPCIInventory() ;
+            $this->getPCIeBandwidth("0000:".$this->settings['PCIID']);
             if ($gpus) {
                 if (isset($gpus[$this->settings['GPUID']])) {
                     $this->pageData['name'] = $gpus[$this->settings['GPUID']]["model"] ;
