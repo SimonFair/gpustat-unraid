@@ -181,7 +181,7 @@ class Intel extends Main
             if (($this->cmdexists && $driver == "i915") || $driver =="XE") {
                 //Command invokes intel_gpu_top in JSON output mode with an update rate of 5 seconds
                 //Command invokes nvidia-smi in query all mode with XML return
-                if ($driver == "i915") {
+                if ($driver != "XE") {
                     $this->stdout = shell_exec(self::CMD_UTILITY . ES . sprintf(self::STATISTICS_PARAM, $this->settings['GPUID']));
                     if (!isset($this->settings['IGTTIMER'])) $this->settings['IGTTIMER'] = ".500 1.500";
                     $command = self::STATISTICS_WRAPPER . ES . $this->settings['IGTTIMER'] . ES . self::CMD_UTILITY;
