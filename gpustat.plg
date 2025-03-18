@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "gpustat">
 <!ENTITY author    "SimonFair">
-<!ENTITY version   "2025.03.12">
+<!ENTITY version   "2025.03.18">
 <!ENTITY launch    "Settings/GPUStatSettings">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/SimonFair/&name;-unraid/master">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
@@ -49,6 +49,11 @@
 -->
 
 <CHANGES>
+###2025.03.18
+
+- Fix driver detection method
+- Fix Nvidia PCI details if bound to vfio.
+
 ###2025.03.12
 
 - Fix driver values
