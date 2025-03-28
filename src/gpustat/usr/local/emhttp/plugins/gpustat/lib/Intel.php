@@ -253,7 +253,7 @@ class Intel extends Main
             $this->pageData['error'][] = Error::get(Error::VENDOR_DATA_NOT_ENOUGH, "Count: $count");
         }
         file_put_contents("/tmp/gpudata".$this->settings['GPUID'],json_encode($data));
-        $data=json_decode(file_get_contents("/tmp/jsonin"),true);
+        #$data=json_decode(file_get_contents("/tmp/jsonin"),true);
         // intel_gpu_top will never show utilization counters on the first sample so we need the second position
         unset($stdout, $this->stdout);
 
@@ -268,7 +268,7 @@ class Intel extends Main
                 'powerutil'     => 'N/A',
                 'video'         => 'N/A',
                 'videnh'        => 'N/A',
-                'compute'       => 'N/A',
+                'compute'       => 0,
                 'sessions'      => 0,
             ];
             $gpus = $this->getInventory() ;
@@ -329,11 +329,18 @@ class Intel extends Main
                     $this->pageData['power'] = max($powerGPU,$powerPackage) . $powerunit ;               
                 }
             }
+            if ($this->settings['DISPFAN']) {
+                $path = glob("/sys/bus/pci/devices/{$this->settings['GPUID']}/hwmon/*/fan1_input");
+                if (isset($path[0]) && is_file($path[0])) {
+                    $this->pageData['fan'] = $this->readSysfsData($path[0]);
+                    $this->pageData['fanmax'] = 4000;
+                }
+            }
             // According to the sparse documentation, rc6 is a percentage of how little the GPU is requesting power
             if ($this->settings['DISPPWRSTATE']) {
                 if (isset($data['rc6']['value'])) {
                     $this->pageData['powerutil'] = $this->roundFloat(100 - $data['rc6']['value'], 2) . "%";
-                    #$this->pageData['powerutil'] = $this->roundFloat(100 - 50, 2) . "%";
+                    if ($powerGPU == 0 && $this->pageData['powerutil'] != 0) $this->pageData['powerutil'] = 0;
                 }
             }
             if ($this->settings['DISPCLOCKS']) {
@@ -421,9 +428,9 @@ class Intel extends Main
               return null; // Return null if no matching PCI ID found
           }
       
-          // Function to generate the JSON from sysfs data based on PCI ID
-          protected function buildXEJSON(string $pciId): string
-          {
+    // Function to generate the JSON from sysfs data based on PCI ID
+    protected function buildXEJSON(string $pciId): string
+    {
       
                       // Construct the sysfs path based on the supplied PCI ID
         $basePath = "/sys/bus/pci/devices/$pciId";

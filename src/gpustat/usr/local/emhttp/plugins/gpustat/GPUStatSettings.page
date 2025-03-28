@@ -209,7 +209,7 @@ Temperature (Nvidia/AMD):
     <?=mk_option($gpustat_cfg['DISPTEMP'], "1", "Yes");?>
   </select>
 
-Fan Usage (Nvidia/AMD**):
+Fan Usage (Nvidia/Intel/AMD**):
 : <select id="DISPFAN" name="DISPFAN" size="1">
     <?=mk_option($gpustat_cfg['DISPFAN'], "0", "No");?>
     <?=mk_option($gpustat_cfg['DISPFAN'], "1", "Yes");?>
@@ -260,6 +260,12 @@ Video Enhance Load:
 : <select id="DISPVIDENH" name="DISPVIDENH" size="1">
     <?=mk_option($gpustat_cfg['DISPVIDENH'], "0", "No");?>
     <?=mk_option($gpustat_cfg['DISPVIDENH'], "1", "Yes");?>
+  </select>
+
+Compute Load:
+: <select id="DISPCOMPUTE" name="DISPCOMPUTE" size="1">
+    <?=mk_option($gpustat_cfg['DISPCOMPUTE'], "0", "No");?>
+    <?=mk_option($gpustat_cfg['DISPCOMPUTE'], "1", "Yes");?>
   </select>
 
 Interrupts Per Second:
