@@ -302,7 +302,7 @@ class Main
         $command = '';
         $pid_command = sprintf('ps j %0d | awk \'{ \$1=\$1 };NR>1\' | cut -d \' \' -f 1', $pid);
 
-        $ppid = (int)trim(shell_exec($pid_command));
+        $ppid = (int)trim(shell_exec($pid_command) ?? 0);
         if ($ppid > 0) {
             $command = $this->getFullCommand($ppid);
         }

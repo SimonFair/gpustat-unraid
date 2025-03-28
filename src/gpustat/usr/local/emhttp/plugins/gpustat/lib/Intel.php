@@ -44,7 +44,7 @@ class Intel extends Main
     const SUPPORTED_APPS = [ // Order here is important because some apps use the same binaries -- order should be more specific to less
         'plex'        => ['Plex Transcoder'],
         'jellyfin'    => ['ffmpeg','jellyfin'],
-        'handbrake'   => ['/usr/bin/HandBrakeCLI'],
+        'handbrake'   => ['ghb'],
         'emby'        => ['ffmpeg', 'EmbyServer'],
         'tdarr'       => ['ffmpeg', 'HandbrakeCLI'],
         'unmanic'     => ['ffmpeg'],
@@ -123,7 +123,7 @@ class Intel extends Main
                     }
                     $this->pageData[$app . 'using'] = true;
                     #$this->pageData[$app . 'mem'] += (int)$this->stripText(' MiB', $process->used_memory);
-                    $this->pageData[$app . 'mem'] = 0;
+                    if (isset($process['memory']['system']['total'])) $this->pageData[$app . 'mem'] = round($process['memory']['system']['total']/1024/1024,2); else $this->pageData[$app . 'mem'] = 0;
                     if (isset($this->pageData[$app . 'count'])) $this->pageData[$app . 'count']++; else $this->pageData[$app . 'count'] = 1;
                     if ($debug_apps) file_put_contents("/tmp/gpuappsint","\nfound app $app $command\n",FILE_APPEND);
                     // If we match a more specific command/app to a process, continue on to the next process
@@ -253,6 +253,7 @@ class Intel extends Main
             $this->pageData['error'][] = Error::get(Error::VENDOR_DATA_NOT_ENOUGH, "Count: $count");
         }
         file_put_contents("/tmp/gpudata".$this->settings['GPUID'],json_encode($data));
+        #$data=json_decode(file_get_contents("/tmp/jsonin"),true);
         // intel_gpu_top will never show utilization counters on the first sample so we need the second position
         unset($stdout, $this->stdout);
 
@@ -267,6 +268,7 @@ class Intel extends Main
                 'powerutil'     => 'N/A',
                 'video'         => 'N/A',
                 'videnh'        => 'N/A',
+                'compute'       => 0,
                 'sessions'      => 0,
             ];
             $gpus = $this->getInventory() ;
@@ -315,9 +317,6 @@ class Intel extends Main
             if (is_numeric(rtrim($this->pageData['video'],"%"))) $maxvideochk = intval(rtrim($this->pageData['video'],"%")); else $maxvideochk = 0;
             if (is_numeric(rtrim($this->pageData['videnh'],"%"))) $maxvidenhchk =intval(rtrim( $this->pageData['videnh'],"%")); else $maxvidenhchk = 0;
 
-            $maxload = (max($max3drenderchk ,$maxblitterchk, $maxvideochk, $maxvidenhchk));
-            $this->pageData['util'] = $maxload.'%';
-
             if ($this->settings['DISPPWRDRAW']) {
                 // Older versions of intel_gpu_top in case people haven't updated
                 if (isset($data['power']['value'])) {
@@ -330,11 +329,18 @@ class Intel extends Main
                     $this->pageData['power'] = max($powerGPU,$powerPackage) . $powerunit ;               
                 }
             }
+            if ($this->settings['DISPFAN']) {
+                $path = glob("/sys/bus/pci/devices/{$this->settings['GPUID']}/hwmon/*/fan1_input");
+                if (isset($path[0]) && is_file($path[0])) {
+                    $this->pageData['fan'] = $this->readSysfsData($path[0]);
+                    $this->pageData['fanmax'] = 4000;
+                }
+            }
             // According to the sparse documentation, rc6 is a percentage of how little the GPU is requesting power
             if ($this->settings['DISPPWRSTATE']) {
                 if (isset($data['rc6']['value'])) {
                     $this->pageData['powerutil'] = $this->roundFloat(100 - $data['rc6']['value'], 2) . "%";
-                    #$this->pageData['powerutil'] = $this->roundFloat(100 - 50, 2) . "%";
+                    if ($powerGPU == 0 && $this->pageData['powerutil'] != 0) $this->pageData['powerutil'] = 0;
                 }
             }
             if ($this->settings['DISPCLOCKS']) {
@@ -353,14 +359,35 @@ class Intel extends Main
                 if (isset($data['clients']) && count($data['clients']) > 0) {
                     $this->pageData['sessions'] = count($data['clients']);
                     if ($this->pageData['sessions'] > 0) {
+                        $clientRender = $clientBlitter = $clientVideo = $clientVideoEnh = $clientCompute = 0 ;
                         foreach ($data['clients'] as $id => $process) {
                             if (isset($process["name"])) {
                                 $this->detectApplication($process);
+                                if (isset($process['engine-classes']['Render/3D']['busy'])) $clientRender =+ $process['engine-classes']['Render/3D']['busy'];
+                                if (isset($process['engine-classes']['Blitter']['busy'])) $clientBlitter =+ $process['engine-classes']['Blitter']['busy'];
+                                if (isset($process['engine-classes']['Video']['busy'])) $clientVideo =+ $process['engine-classes']['Video']['busy'];
+                                if (isset($process['engine-classes']['VideoEnhance']['busy'])) $clientVideoEnh =+ $process['engine-classes']['VideoEnhance']['busy'];
+                                if (isset($process['engine-classes']['Compute']['busy'])) $clientCompute =+ $process['engine-classes']['Compute']['busy'];
                             }
                         }
+                        $maxcomputechk = 0;
+                        if ($max3drenderchk == 0) $this->pageData['3drender'] = $this->roundFloat($clientRender) . '%';
+                        if ($maxblitterchk == 0) $this->pageData['blitter'] = $this->roundFloat($clientBlitter) . '%';
+                        if ($maxvideochk == 0) $this->pageData['video'] = $this->roundFloat($clientVideo) . '%';
+                        if ($maxvidenhchk == 0) $this->pageData['videnh'] = $this->roundFloat($clientVideoEnh) . '%';
+                        if ($maxcomputechk == 0) $this->pageData['compute'] = $this->roundFloat($clientCompute) . '%';
                     }
                 }
             }
+            if (is_numeric(rtrim($this->pageData['3drender'],"%"))) $max3drenderchk = intval(rtrim($this->pageData['3drender'],"%")); else $max3drenderchk = 0;
+            if (is_numeric(rtrim($this->pageData['blitter'],"%"))) $maxblitterchk = intval(rtrim($this->pageData['blitter'],"%")); else $maxblitterchk = 0;
+            if (is_numeric(rtrim($this->pageData['video'],"%"))) $maxvideochk = intval(rtrim($this->pageData['video'],"%")); else $maxvideochk = 0;
+            if (is_numeric(rtrim($this->pageData['videnh'],"%"))) $maxvidenhchk =intval(rtrim( $this->pageData['videnh'],"%")); else $maxvidenhchk = 0;
+            if (is_numeric(rtrim($this->pageData['compute'],"%"))) $maxcomputechk =intval(rtrim( $this->pageData['compute'],"%")); else $maxcomputechk = 0;
+
+            $maxload = (max($max3drenderchk ,$maxblitterchk, $maxvideochk, $maxvidenhchk, $maxcomputechk));
+            $this->pageData['util'] = $maxload.'%';
+            
             $this->getPCIeBandwidth($this->settings['GPUID']);
         } else {
             $this->pageData['error'][] = Error::get(Error::VENDOR_DATA_BAD_PARSE);
@@ -401,9 +428,9 @@ class Intel extends Main
               return null; // Return null if no matching PCI ID found
           }
       
-          // Function to generate the JSON from sysfs data based on PCI ID
-          protected function buildXEJSON(string $pciId): string
-          {
+    // Function to generate the JSON from sysfs data based on PCI ID
+    protected function buildXEJSON(string $pciId): string
+    {
       
                       // Construct the sysfs path based on the supplied PCI ID
         $basePath = "/sys/bus/pci/devices/$pciId";
