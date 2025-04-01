@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "gpustat">
 <!ENTITY author    "SimonFair">
-<!ENTITY version   "2025.03.29">
+<!ENTITY version   "2025.04.01">
 <!ENTITY launch    "Settings/GPUStatSettings">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/SimonFair/&name;-unraid/master">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
@@ -49,6 +49,11 @@
 -->
 
 <CHANGES>
+###2025.04.01
+
+- Fix output for some igpus.
+- Add Temp of cards if provided when on kernel 6.14 or will display N/A
+
 ###2025.03.29
 
 - Chg Use new -n intel_gpu_top option for more reliable data gather. This removes the top timers requirements.
