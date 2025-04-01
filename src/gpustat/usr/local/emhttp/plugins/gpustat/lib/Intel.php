@@ -39,7 +39,7 @@ class Intel extends Main
     const INVENTORY_PARAM = " -Dmm | grep -E 'Display|VGA' ";
     const INVENTORY_REGEX =
         '/VGA.+:\s+Intel\s+Corporation\s+(?P<model>.*)\s+(\[|Family|Integrated|Graphics|Controller|Series|\()/iU';
-    const STATISTICS_PARAM = '-n 1 -J -s 1000 -d  pci:slot="';
+    const STATISTICS_PARAM = '-J -s 1000 -n 2 -d  pci:slot="';
     const STATISTICS_WRAPPER = 'timeout -k ';
     const SUPPORTED_APPS = [ // Order here is important because some apps use the same binaries -- order should be more specific to less
         'plex'        => ['Plex Transcoder'],
@@ -180,11 +180,7 @@ class Intel extends Main
         {
             if (($this->cmdexists && $driver == "i915") || $driver =="XE") {
                 //Command invokes intel_gpu_top in JSON output mode with an update rate of 5 seconds
-                //Command invokes nvidia-smi in query all mode with XML return
                 if ($driver != "XE") {
-                    #$this->stdout = shell_exec(self::CMD_UTILITY . ES . sprintf(self::STATISTICS_PARAM, $this->settings['GPUID']));
-                    #if (!isset($this->settings['IGTTIMER'])) $this->settings['IGTTIMER'] = ".500 1.500";
-                    #$command = self::STATISTICS_WRAPPER . ES . $this->settings['IGTTIMER'] . ES . self::CMD_UTILITY;
                     $command = self::CMD_UTILITY;
                     $this->runCommand($command, self::STATISTICS_PARAM. $this->settings['GPUID'].'"', false); 
                 } else {
@@ -230,15 +226,23 @@ class Intel extends Main
      */
     private function parseStatistics()
     {
+        // JSON output from intel_gpu_top with multiple array indexes isn't properly formatted
+        $stdout= str_replace(['[',']'],['',''],$this->stdout);
+        $stdout = str_replace('}{', '},{', str_replace(["\n","\t"], '', $stdout));
+
         try {
-            $data = json_decode($this->stdout, true, 512, JSON_THROW_ON_ERROR);
+            // Split the string into two JSON objects
+            $splitJson = preg_split('/\}\s*,\s*\{/m', $stdout);
+            // Format the split parts correctly for JSON decoding
+            $splitJson[0] .= '}';
+            $splitJson[1] = '{' . $splitJson[1];
+            $data = json_decode($splitJson[1], true, 512, JSON_THROW_ON_ERROR);
         } catch (JsonException $e) {
             $data = [];
             $this->pageData['error'][] = Error::get(Error::VENDOR_DATA_BAD_PARSE, $e->getMessage());
         }
 
         // Need to make sure we have at least two array indexes to take the second one
-        $data = $data[0];
         $count = count($data);
         if ($count < 1) {
             $this->pageData['error'][] = Error::get(Error::VENDOR_DATA_NOT_ENOUGH, "Count: $count");
@@ -325,6 +329,18 @@ class Intel extends Main
                 if (isset($path[0]) && is_file($path[0])) {
                     $this->pageData['fan'] = $this->readSysfsData($path[0]);
                     $this->pageData['fanmax'] = 4000;
+                }
+            }
+            if ($this->settings['DISPTEMP']) {
+                $path = glob("/sys/bus/pci/devices/{$this->settings['GPUID']}/hwmon/*/temp1_input");
+                if (isset($path[0]) && is_file($path[0])) {
+                    $this->pageData['temp'] = $this->readSysfsData($path[0]);
+                    $this->pageData['temp'] = $this->pageData['temp'] / 1000 . "C";
+                    if ($this->settings['TEMPFORMAT'] == 'F') {
+                        foreach (['temp'] as $key) {
+                            $this->pageData[$key] = $this->convertCelsius((int) $this->stripText('C', $this->pageData[$key])) . 'F';
+                        }
+                    }
                 }
             }
             // According to the sparse documentation, rc6 is a percentage of how little the GPU is requesting power

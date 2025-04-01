@@ -131,7 +131,7 @@ class Main
      */
     protected function checkVFIO(string $pciid)
     {
-        $files = scandir("/sys/bus/pci/drivers/vfio-pci/") ;
+        $files = @scandir("/sys/bus/pci/drivers/vfio-pci/") ;
         if ($files) $vfio = in_array($pciid, $files) ; else $vfio = $files ;
         return $vfio ;
     }
