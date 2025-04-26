@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "gpustat">
 <!ENTITY author    "SimonFair">
-<!ENTITY version   "2025.04.01">
+<!ENTITY version   "2025.04.26">
 <!ENTITY launch    "Settings/GPUStatSettings">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/SimonFair/&name;-unraid/master">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
@@ -49,6 +49,10 @@
 -->
 
 <CHANGES>
+###2025.04.26
+
+- Add option for NV apps debug file.
+
 ###2025.04.01
 
 - Fix output for some igpus.
