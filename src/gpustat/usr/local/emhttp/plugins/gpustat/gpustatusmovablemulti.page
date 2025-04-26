@@ -238,7 +238,7 @@ $gpu_nv = $gpu_intel = $gpu_amd = $gpu_unknown = false;
             $page_render .="<span class='gpu-videnhbar$count load' id='gpu-videnhbar$count load'></span><span></span></div></span></td></tr>" ;
         }
 
-        if($gpustat_cfg['DISPCOMPUTE']) {
+        if($gpustat_cfg['DISPCOMPUTE'] ?? 1) {
             $page_render .=  "<tr class='vfio_notinuse$count'><td colspan ='2' ><span class='w36'><i class='ups fa fa-fw icon-cpu'></i>_(Compute)_" ;
             $page_render .="</span><span class='w44'><span class='gpu-videnh$count load'></span><div class='usage-disk sys'>" ;
             $page_render .="<span class='gpu-computebar$count load' id='gpu-computebar$count load'></span><span></span></div></span></td></tr>" ;

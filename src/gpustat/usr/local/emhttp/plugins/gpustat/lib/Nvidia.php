@@ -93,7 +93,7 @@ class Nvidia extends Main
      */
     private function detectApplication (SimpleXMLElement $process)
     {
-        $debug_apps = false;
+        $debug_apps = is_file("/tmp/gpustatapps") ?? false;
         if ($debug_apps) file_put_contents("/tmp/gpuappsnv","");
         foreach (self::SUPPORTED_APPS as $app => $commands) {
             foreach ($commands as $command) {
@@ -380,7 +380,7 @@ class Nvidia extends Main
                 } else {
                     $this->stdout = $this->buildNouveauXML("0000:".$this->settings['PCIID']);
                 }
-                #$this->stdout = shell_exec("cat /tmp/nv" );
+
                 if (!empty($this->stdout) && strlen($this->stdout) > 0) {
                     $this->parseStatistics();
                 } else {
