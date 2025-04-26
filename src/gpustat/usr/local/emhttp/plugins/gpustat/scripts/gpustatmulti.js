@@ -91,7 +91,7 @@ const gpustat_statusm = (input) => {
                     data["appssupp"].forEach(function (app) {
                         if (data[app + "using"]) {
                             $('.gpu-img-span-'+app+panel).css('display', "inline");
-                            $('#gpu-'+app+panel).attr('title', "Count: " + data[app+"count"] + " Memory: " + data[app+"mem"] + "MB");
+                            $('#gpu-'+app+panel).attr('title', "Name:" + app.charAt(0).toUpperCase() + app.slice(1) + " Count: " + data[app+"count"] + " Memory: " + data[app+"mem"] + "MB");
                         } else {
                             $('.gpu-img-span-'+app+panel).css('display', "none");
                             $('#gpu-'+app+panel).attr('title', "");
