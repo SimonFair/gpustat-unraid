@@ -187,7 +187,7 @@ class Intel extends Main
                     $this->stdout = $this->buildXEJSON($this->settings['GPUID']);
                 }
                 file_put_contents("/tmp/gpurawdata".$this->settings['GPUID'],json_encode($this->stdout));
-                #$this->runCommand("cat ", " /tmp/i915.txt", false); 
+               # $this->runCommand("cat ", " /tmp/i915.txt", false); 
                 if (!empty($this->stdout) && strlen($this->stdout) > 0) {
                     $this->parseStatistics();
                 } else {
@@ -228,6 +228,7 @@ class Intel extends Main
     {
         // JSON output from intel_gpu_top with multiple array indexes isn't properly formatted
         $stdout= str_replace(['[',']'],['',''],$this->stdout);
+        #$stdout = $this->stdout;
         $stdout = str_replace('}{', '},{', str_replace(["\n","\t"], '', $stdout));
 
         try {
@@ -465,31 +466,35 @@ class Intel extends Main
         $frequencyRequested = null;
         $frequencyActual = null;
         $interruptsCount = null;
-        $rc6Value = null; // Convert to percentage if needed
+        $rc6Value = 100; // Convert to percentage if needed
         $powerGpu = null; // Convert µW to W
         $powerPackage = null; // Approximate package power
 
         $clientsPath = "/sys/kernel/debug/dri/$pciId/clients";
-        $clients = [];
 
         if (file_exists($clientsPath)) {
             $lines = file($clientsPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            #$lines[] = "command  tgid dev master a   uid      magic";
+            #$lines[] = "                Xorg  5226   1   y    y     0          0";
+            #$lines[] = "                qemu  5227   1   y    y     0          0";
+            
             array_shift($lines); // Remove the header row
-
-            foreach ($lines as $line) {
-                $columns = preg_split('/\s+/', trim($line));
-                if (count($columns) >= 6) {
-                    list($command, $tgid, $dev, $master, $a, $uid) = $columns;
-                    $clients[$tgid] = [
-                        "name" => $command,
-                        "pid" => $tgid,
-                        "gpu_instance_id" => "N/A",
-                        "compute_instance_id" => "N/A",
-                        "type" => "C",
-                        "used_memory" => "N/A"
-                    ];
+            if ($lines) {
+                foreach ($lines as $line) {
+                    $columns = preg_split('/\s+/', trim($line));
+                    if (count($columns) >= 6) {
+                        list($command, $tgid, $dev, $master, $a, $uid) = $columns;
+                        $clients[$tgid] = [
+                            "name" => $command,
+                            "pid" => $tgid,
+                            "gpu_instance_id" => "N/A",
+                            "compute_instance_id" => "N/A",
+                            "type" => "C",
+                            "used_memory" => "N/A"
+                        ];
+                    }
                 }
-            }
+            } else $clients = null;
         }
 
         // Build the JSON structure
