@@ -185,6 +185,7 @@ class Intel extends Main
                     $this->runCommand($command, self::STATISTICS_PARAM. $this->settings['GPUID'].'"', false); 
                 } else {
                     $this->stdout = $this->buildXEJSON($this->settings['GPUID']);
+                    $this->cmdexists = true;
                 }
                 file_put_contents("/tmp/gpurawdata".$this->settings['GPUID'],json_encode($this->stdout));
                # $this->runCommand("cat ", " /tmp/i915.txt", false); 
