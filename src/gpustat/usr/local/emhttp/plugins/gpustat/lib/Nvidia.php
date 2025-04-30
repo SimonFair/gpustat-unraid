@@ -73,6 +73,7 @@ class Nvidia extends Main
         'subspace'    => ['subspace'],
         'xorg'        => ['Xorg'],
         'qemu'        => ['qemu'],
+        'ebook2audiobook'        => ['app.py'],
     ];
 
 

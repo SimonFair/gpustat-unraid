@@ -110,7 +110,7 @@ function GPULayout($count,$vendor,$gpustat_cfg) {
     $apps = [
     'plex', 'jellyfin', 'handbrake', 'emby', 'tdarr', 'unmanic', 'dizquetv', 'ersatztv',
     'fileflows', 'frigate', 'deepstack', 'nsfminer', 'shinobipro', 'foldinghome','threadfin', 'tunarr', 'codeproject', 'compreface',
-    'ollama','immich','localai', 'invokeai', 'chia', 'mmx', 'subspace','xorg','qemu'
+    'ollama','immich','localai', 'invokeai', 'chia', 'mmx', 'subspace','xorg','qemu','ebook2audiobook'
 ];
 $gpu_nv = $gpu_intel = $gpu_amd = $gpu_unknown = false;
     switch ($vendor) {
