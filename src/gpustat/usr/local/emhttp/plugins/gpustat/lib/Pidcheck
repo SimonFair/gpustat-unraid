@@ -1,0 +1,41 @@
+<?PHP
+function getFullCommand(int $pid): string
+    {
+        $command = '';
+        $file = sprintf('/proc/%0d/cmdline', $pid);
+
+        if (file_exists($file)) {
+            $command = trim(@file_get_contents($file), "\0");
+        }
+
+        return $command;
+    }
+    /*
+    * Retrieves the full command of a parent process with arguments for a given process ID
+    *
+    * @param int $pid
+    * @return string
+    */
+function getParentCommand(int $pid): string
+    {
+        $command = '';
+        $pid_command = sprintf('ps j %0d | awk \'{ $1=$1 };NR>1\' | cut -d \' \' -f 1', $pid);
+        echo "$pid_command\n";
+        $ppid = (int)trim(shell_exec($pid_command) ?? 0);
+        echo "Parent PID:$ppid\n";
+        if ($ppid > 0) {
+            $command = getFullCommand($ppid);
+        }
+
+        return $command;
+    }
+
+
+$pid = $argv[1];
+echo "PID is:$pid\n";
+echo "PID Info\n";
+echo getFullCommand($pid);
+echo "\nParent for PID Info\n";
+echo getParentCommand($pid)."\n";
+?>
+    
