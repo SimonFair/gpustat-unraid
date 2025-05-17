@@ -130,7 +130,7 @@ $gpu_nv = $gpu_intel = $gpu_amd = $gpu_unknown = false;
 }
 
     $page_render = '<tr class="updated"><td>' ;
-    $page_render .= "<span><span class='gpu-vendor$count w18'></span><span class='gpu-driver$count w18'></span></span>&nbsp;<span class='gpu-name$count w18'></span></td></td>" ;
+    $page_render .= "<span><span class='gpu-vendor$count w18'></span><span class='gpu-driver$count w18'></span></span>&nbsp;<span class='gpu-name$count w44'></span></td></td>" ;
 
     # No GPU Set 
 
