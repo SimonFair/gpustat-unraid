@@ -124,11 +124,14 @@ const gpustat_statusm = (input) => {
             } else {
                 $('.nopcie'+panel).show();
             }
-            var hidden = $.cookie('hidden_content');
-            if (hidden) {
-                hidden = hidden.split(';');
-                if (hidden.includes($("#tblGPUDash" + panel).attr('title').md5())) 
-                $("#tblGPUDash" + panel ).mixedView(0);
+            var hidden = $.cookie('hidden_content') || (typeof cookie !== 'undefined' ? cookie.hidden_content : '');
+            hidden = hidden ? hidden.split(';') : [];
+            
+            var panelId = "#tblGPUDash" + panel;
+            var panelHash = $(panelId).attr('title').md5();
+            
+            if (hidden.includes(panelHash)) {
+                $(panelId).mixedView(0);
             }
    
             })
