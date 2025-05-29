@@ -188,7 +188,7 @@ class Intel extends Main
                     $this->cmdexists = true;
                 }
                 file_put_contents("/tmp/gpurawdata".$this->settings['GPUID'],json_encode($this->stdout));
-               # $this->runCommand("cat ", " /tmp/i915.txt", false); 
+                #$this->runCommand("cat ", " /tmp/i915.txt", false); 
                 if (!empty($this->stdout) && strlen($this->stdout) > 0) {
                     $this->parseStatistics();
                 } else {
@@ -372,11 +372,11 @@ class Intel extends Main
                         foreach ($data['clients'] as $id => $process) {
                             if (isset($process["name"])) {
                                 $this->detectApplication($process);
-                                if (isset($process['engine-classes']['Render/3D']['busy'])) $clientRender =+ $process['engine-classes']['Render/3D']['busy'];
-                                if (isset($process['engine-classes']['Blitter']['busy'])) $clientBlitter =+ $process['engine-classes']['Blitter']['busy'];
-                                if (isset($process['engine-classes']['Video']['busy'])) $clientVideo =+ $process['engine-classes']['Video']['busy'];
-                                if (isset($process['engine-classes']['VideoEnhance']['busy'])) $clientVideoEnh =+ $process['engine-classes']['VideoEnhance']['busy'];
-                                if (isset($process['engine-classes']['Compute']['busy'])) $clientCompute =+ $process['engine-classes']['Compute']['busy'];
+                                if (isset($process['engine-classes']['Render/3D']['busy'])) $clientRender += $process['engine-classes']['Render/3D']['busy'];
+                                if (isset($process['engine-classes']['Blitter']['busy'])) $clientBlitter += $process['engine-classes']['Blitter']['busy'];
+                                if (isset($process['engine-classes']['Video']['busy'])) $clientVideo += $process['engine-classes']['Video']['busy'];
+                                if (isset($process['engine-classes']['VideoEnhance']['busy'])) $clientVideoEnh += $process['engine-classes']['VideoEnhance']['busy'];
+                                if (isset($process['engine-classes']['Compute']['busy'])) $clientCompute += $process['engine-classes']['Compute']['busy'];
                             }
                         }
                         $maxcomputechk = 0;

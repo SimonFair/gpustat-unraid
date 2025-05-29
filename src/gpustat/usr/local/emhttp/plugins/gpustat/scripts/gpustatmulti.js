@@ -72,7 +72,7 @@ const gpustat_statusm = (input) => {
                         });
                         break;
                     case 'AMD':
-                        $('.gpu-powerbar'+panel).removeAttr('style').css('width', parseInt(data["power"] / data["powermax"] * 100) + "%");
+                        $('.gpu-powerbar'+panel).removeAttr('style').css('width', parseInt(data["power"].replace("W","") / data["powermax"] * 100) + "%");
                         $('.gpu-fanbar'+panel).removeAttr('style').css('width', parseInt(data["fan"] / data["fanmax"] * 100) + "%");
                         let amdbars = [
                             'util', 'event', 'vertex',
@@ -124,7 +124,10 @@ const gpustat_statusm = (input) => {
             } else {
                 $('.nopcie'+panel).show();
             }
-            var hidden = $.cookie('hidden_content') || (typeof cookie !== 'undefined' ? cookie.hidden_content : '');
+            // Prefer file value if both cookie and file exist
+            var hidden = (typeof cookie !== 'undefined' && cookie.hidden_content) 
+                ? cookie.hidden_content 
+                : $.cookie('hidden_content');
             hidden = hidden ? hidden.split(';') : [];
             
             var panelId = "#tblGPUDash" + panel;

@@ -304,11 +304,13 @@ class AMD extends Main
                         }
                     }
                     if ($this->settings['DISPPWRDRAW']) {
-                        if (isset($data['power1']['power1_average'])) {
-                            $sensors['power'] = $this->roundFloat($data['power1']['power1_average'], 1);
-                            $sensors['powerunit'] = 'W';
-                            if (isset($data['power1']['power1_cap'])) {
-                                $sensors['powermax'] = $this->roundFloat($data['power1']['power1_cap'], 1);
+                        if (isset($data['power1'])) $powervalue = "power1";
+                        if (isset($data['PPT'])) $powervalue = "PPT";
+
+                        if (isset($data[$powervalue]['power1_average'])) {
+                            $sensors['power'] = $this->roundFloat($data[$powervalue]['power1_average'], 1)."W";
+                            if (isset($data[$powervalue]['power1_cap'])) {
+                                $sensors['powermax'] = $this->roundFloat($data[$powervalue]['power1_cap'], 1);
                             }
                         }
                         if (isset($data['vddgfx']['in0_input'])) {

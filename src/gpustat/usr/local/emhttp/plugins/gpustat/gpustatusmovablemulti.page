@@ -374,7 +374,7 @@ $gpu_nv = $gpu_intel = $gpu_amd = $gpu_unknown = false;
                 $page_render .= "<span class='gpu-fanbar$count' id='gpu-fanbar$count'></span><span></span></div></span>" ;
             }
             if($gpustat_cfg['DISPPWRDRAW']) {
-                $page_render .= "<span class='w26'><span class='gpu-power$count load'></span><span class='gpu-powerunit'></span><div class='usage-disk sys'>" ;
+                $page_render .= "<span class='w26'><span class='gpu-power$count load'></span><div class='usage-disk sys'>" ;
                 $page_render .= "<span class='gpu-powerbar$count' id='gpu-powerbar$count'></span><span></span></div></span></td></tr>" ;
             }
          
