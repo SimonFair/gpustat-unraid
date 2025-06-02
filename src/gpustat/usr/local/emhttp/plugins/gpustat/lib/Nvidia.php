@@ -106,7 +106,7 @@ class Nvidia extends Main
                             if (!empty($pid_info) && strlen($pid_info) > 0) {
                                 if ($command === 'python3.8') {
                                     // CodeProject doesn't have any signifier in the full command output
-                                    if (strpos($pid_info, '/ObjectDetectionYolo/detect_adapter.py') === false) {
+                                    if (stripos($pid_info, '/ObjectDetectionYOLO') === false) {
                                         continue 2;
                                     }
                                 } elseif ($command === 'python3') {

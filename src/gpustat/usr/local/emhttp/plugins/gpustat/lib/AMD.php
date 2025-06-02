@@ -309,9 +309,12 @@ class AMD extends Main
 
                         if (isset($data[$powervalue]['power1_average'])) {
                             $sensors['power'] = $this->roundFloat($data[$powervalue]['power1_average'], 1)."W";
-                            if (isset($data[$powervalue]['power1_cap'])) {
-                                $sensors['powermax'] = $this->roundFloat($data[$powervalue]['power1_cap'], 1);
-                            }
+                        }
+                        if (isset($data[$powervalue]['power1_input'])) {
+                            $sensors['power'] = $this->roundFloat($data[$powervalue]['power1_input'], 1)."W";
+                        }
+                        if (isset($data[$powervalue]['power1_cap'])) {
+                            $sensors['powermax'] = $this->roundFloat($data[$powervalue]['power1_cap'], 1);
                         }
                         if (isset($data['vddgfx']['in0_input'])) {
                             $sensors['voltage'] = $this->roundFloat($data['vddgfx']['in0_input'], 2);
