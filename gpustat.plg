@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "gpustat">
 <!ENTITY author    "SimonFair">
-<!ENTITY version   "2025.06.02">
+<!ENTITY version   "2025.06.03">
 <!ENTITY launch    "Settings/GPUStatSettings">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/SimonFair/&name;-unraid/master">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
@@ -49,6 +49,10 @@
 -->
 
 <CHANGES>
+###2025.06.03
+
+- Fix Intel power set to one decimal place.
+
 ###2025.06.02
 
 - Fix AMD Power readings for different card types.
