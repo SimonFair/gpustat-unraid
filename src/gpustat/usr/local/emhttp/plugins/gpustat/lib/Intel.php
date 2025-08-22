@@ -51,52 +51,6 @@ class Intel extends Main
         parent::__construct($settings);
     }
 
-        /**
-     * Iterates supported applications and their respective commands to match against processes using GPU hardware
-     *
-     * @param array $process
-     */
-    private function detectApplication (array $process)
-    {
-        $debug_apps = is_file("/tmp/gpustatapps") ?? false;
-        if ($debug_apps) file_put_contents("/tmp/gpuappsint","");
-        $dockerInfo = null;
-        $controlGroup = $this->getControlGroup((int) $process['pid']);
-        $usedMemory = (int) $this->stripText(' MiB', $process['memory']);
-
-        if ($controlGroup && preg_match('/docker\/([a-z0-9]+)$/', $controlGroup, $matches)) {
-            $dockerInfo = $this->getDockerContainerInspect($matches[1]);
-        }
-
-        if (!$controlGroup || !$dockerInfo) {
-            file_put_contents("/tmp/hostapps",json_encode($this->hostapps));
-            if (isset($this->hostapps[$process['name']])) $icon = $this->hostapps[$process['name']]; else $icon=Self::DOCKER_ICON_DEFAULT_PATH;
-            $active_app = [
-                'name' => (string) $process['name'],
-                'title' => (string) $process['name'],
-                'icon' => $icon,
-                'mem' => $usedMemory,
-                'count' => 1,
-            ];
-        } else {
-            $active_app = [
-                'name' => $dockerInfo['name'],
-                'title' => $dockerInfo['title'],
-                'icon' => $dockerInfo['icon'],
-                'mem' => $usedMemory,
-                'count' => 1,
-            ];
-        }
-
-        $index = array_search($active_app['name'], array_column($this->pageData['active_apps'], 'name'));
-
-        if ($index === false) {
-            $this->pageData['active_apps'][] = $active_app;
-        } else {
-            $this->pageData['active_apps'][$index]['mem'] += $usedMemory;
-            $this->pageData['active_apps'][$index]['count']++;
-        }
-    }
     /**
      * Retrieves Intel inventory using lspci and returns an array
      *
