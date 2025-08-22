@@ -37,6 +37,14 @@ class Main
 {
     const PLUGIN_NAME = 'gpustat';
     const COMMAND_EXISTS_CHECKER = 'which';
+    const DOCKER_INSPECT = 'docker container inspect';
+    const DOCKER_ICON_DEFAULT_PATH = '/plugins/dynamix.docker.manager/images/question.png';
+    const DOCKER_ICON_PATH = '/var/local/emhttp/plugins/dynamix.docker.manager/docker.json';
+        const HOST_APPS = [ 
+        'xorg'              => ['/plugins/gpustat/images/xorg.png'],
+        'qemu-system-x86'   => ['/plugins/gpustat/images/qemu.png'],
+
+    ];
 
     /**
      * @var array
@@ -57,6 +65,11 @@ class Main
      * @var array
      */
     protected $pageData;
+
+    /**
+     * @var array
+     */
+    protected $hostapps;
 
     /**
      * @var bool
@@ -99,7 +112,23 @@ class Main
             'pciewidthmax'  => 'N/A',
             'igpu' => "",
         ];
+
+        $this->hostapps = Self::HOST_APPS;
+        $hostappsfile = "/boot/config/plugins/gpustat/hostapps.json";
+        if (file_exists($hostappsfile)) {
+            $jsonData = json_decode(file_get_contents($hostappsfile), true);
+
+            if (is_array($jsonData)) {
+                // Merge arrays (recursive if you want deeper merging)
+                $this->hostapps = array_merge_recursive($this->hostapps, $jsonData);
+                // OR if you want later values to overwrite earlier ones:
+                // $hostapps = array_replace_recursive($hostapps, $jsonData);
+            } 
+
+        }
+           # file_put_contents($hostappsfile,json_encode($this->hostapps));
     }
+
 
     /**
      * Checks if vendor utility exists in the system and dies if it does not
@@ -335,6 +364,109 @@ class Main
             }
         }
         return null;
+    }
+
+    /**
+     * Retrieves the control group for a given process ID
+     *
+     * @param int $pid
+     * @return string
+     */
+    protected function getControlGroup(int $pid): string
+    {
+        $cgroup = '';
+        $file = sprintf('/proc/%0d/cgroup', $pid);
+
+        if (file_exists($file)) {
+            $cgroup = trim(@file_get_contents($file), "\0");
+        }
+
+        return $cgroup;
+    }
+
+    /**
+     * Retrieves docker container info for a given docker ID
+     *
+     * @param string $id
+     * @return array
+     */
+    protected function getDockerContainerInspect(string $id): array
+    {
+        $this->runCommand(self::DOCKER_INSPECT, $id);
+
+        $json = json_decode($this->stdout);
+        if (!$json || !isset($json[0]->Config->Labels)) {
+            return [];
+        }
+
+        $docker_name = $json[0]->Name;
+        $docker_name = preg_replace('/^\//', '', $docker_name);
+
+        return [
+            'name' => $docker_name,
+            'title' => $json[0]->Config->Labels->{"org.opencontainers.image.title"} ?? $docker_name,
+            'icon' => $this->getDockerContainerIcon($docker_name),
+        ];
+    }
+    /**  Iterates supported applications and their respective commands to match against processes using GPU hardware
+     *
+     * @param array $process
+     */
+    protected function detectApplication (array $process)
+    {
+        $dockerInfo = null;
+        $controlGroup = $this->getControlGroup((int) $process['pid']);
+        $usedMemory = (int) $this->stripText(' MiB', $process['memory']);
+
+        if ($controlGroup && preg_match('/docker\/([a-z0-9]+)$/', $controlGroup, $matches)) {
+            $dockerInfo = $this->getDockerContainerInspect($matches[1]);
+        }
+
+        if (!$controlGroup || !$dockerInfo) {
+            file_put_contents("/tmp/hostapps",json_encode($this->hostapps));
+            if (isset($this->hostapps[$process['name']])) $icon = $this->hostapps[$process['name']]; else $icon=Self::DOCKER_ICON_DEFAULT_PATH;
+            $active_app = [
+                'name' => (string) $process['name'],
+                'title' => (string) $process['name'],
+                'icon' => $icon,
+                'mem' => $usedMemory,
+                'count' => 1,
+            ];
+        } else {
+            $active_app = [
+                'name' => $dockerInfo['name'],
+                'title' => $dockerInfo['title'],
+                'icon' => $dockerInfo['icon'],
+                'mem' => $usedMemory,
+                'count' => 1,
+            ];
+        }
+
+        $index = array_search($active_app['name'], array_column($this->pageData['active_apps'], 'name'));
+
+        if ($index === false) {
+            $this->pageData['active_apps'][] = $active_app;
+        } else {
+            $this->pageData['active_apps'][$index]['mem'] += $usedMemory;
+            $this->pageData['active_apps'][$index]['count']++;
+        }
+    }
+
+    /**
+     * Retrieves docker container icon for a given docker NAME
+     *
+     * @param string $name
+     * @return string
+     */
+    protected function getDockerContainerIcon(string $name): string
+    {
+        if (!file_exists(self::DOCKER_ICON_PATH)) {
+            return self::DOCKER_ICON_DEFAULT_PATH;
+        }
+
+        $json = json_decode(file_get_contents(self::DOCKER_ICON_PATH));
+
+        return $json->$name->icon ?: self::DOCKER_ICON_DEFAULT_PATH;
     }
 
     /**

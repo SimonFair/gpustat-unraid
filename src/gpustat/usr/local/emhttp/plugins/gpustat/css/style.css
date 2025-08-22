@@ -27,16 +27,15 @@
 }
 
 span.gpu {
-    width: 150px;
     display: inline-block;
 }
 
-span.gpu-img-span {
-    display: none;
+span.gpu-img-span { 
+    display: inline-block;
 }
 
 .gpu-image {
     padding-left: 8px;
-    height: 32px;
-    width: 32px;
+    height: 24px;
+    width: 24px;
 }

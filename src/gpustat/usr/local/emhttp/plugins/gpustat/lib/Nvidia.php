@@ -45,36 +45,6 @@ class Nvidia extends Main
         '/^(?P<busid>[0-9a-f]{2}).*\[AMD(\/ATI)?\]\s+(?P<model>.+)\s+(\[(?P<product>.+)\]|\()/imU';
 
     const STATISTICS_PARAM = '-q -x -g %s 2>&1';
-    const SUPPORTED_APPS = [ // Order here is important because some apps use the same binaries -- order should be more specific to less
-        'plex'        => ['Plex Transcoder'],
-        'jellyfin'    => ['jellyfin-ffmpeg'],
-        'handbrake'   => ['/usr/bin/HandBrakeCLI'],
-        'emby'        => ['ffmpeg', 'Emby'],
-        'tdarr'       => ['ffmpeg', 'HandbrakeCLI'],
-        'unmanic'     => ['ffmpeg'],
-        'dizquetv'    => ['ffmpeg'],
-        'ersatztv'    => ['ffmpeg'],
-        'fileflows'   => ['ffmpeg'],
-        'frigate'     => ['ffmpeg'],
-        'threadfin'   => ['ffmpeg','Threadfin'],
-        'tunarr'      => ['ffmpeg','tunarr'],
-        'codeproject' => ['python3.8'],
-        'deepstack'   => ['python3'],
-        'nsfminer'    => ['nsfminer'],
-        'shinobipro'  => ['shinobi'],
-        'foldinghome' => ['FahCore'],
-        'compreface'  => ['uwsgi'],
-        'ollama'     => ['ollama_llama_server','/usr/bin/ollama'],
-        'immich'     => ['/config/machine-learning/cuda','python'],
-        'localai'     => ['localai'],
-        'invokeai'    => ['invokeai'],
-        'chia'        => ['chia'],
-        'mmx'         => ['mmx_node'],
-        'subspace'    => ['subspace'],
-        'xorg'        => ['Xorg'],
-        'qemu'        => ['qemu'],
-    ];
-
 
     /**
      * Nvidia constructor.
@@ -91,50 +61,48 @@ class Nvidia extends Main
      *
      * @param SimpleXMLElement $process
      */
-    private function detectApplication (SimpleXMLElement $process)
+    private function detectApplication (array $process)
+
+    /* Array pid, memory, name */
     {
         $debug_apps = is_file("/tmp/gpustatapps") ?? false;
         if ($debug_apps) file_put_contents("/tmp/gpuappsnv","");
-        foreach (self::SUPPORTED_APPS as $app => $commands) {
-            foreach ($commands as $command) {
-                if (strpos($process->process_name, $command) !== false) {
-                    // For Handbrake/ffmpeg: arguments tell us which application called it
-                    if (in_array($command, ['ffmpeg', 'HandbrakeCLI', 'python3.8','python3'])) {
-                        if (isset($process->pid)) {
-                            $pid_info = $this->getFullCommand((int) $process->pid);
-                            if ($debug_apps) file_put_contents("/tmp/gpuappsnv","$command\n$pid_info\n",FILE_APPEND);
-                            if (!empty($pid_info) && strlen($pid_info) > 0) {
-                                if ($command === 'python3.8') {
-                                    // CodeProject doesn't have any signifier in the full command output
-                                    if (stripos($pid_info, '/ObjectDetectionYOLO') === false) {
-                                        continue 2;
-                                    }
-                                } elseif ($command === 'python3') {
-                                    // Deepstack doesn't have any signifier in the full command output
-                                    if (strpos($pid_info, '/app/intelligencelayer/shared') === false) {
-                                        continue 2;
-                                    }
-                                } elseif (stripos($pid_info, strtolower($app)) === false) {
-                                    // Try to match the app name in the parent process
-                                    $ppid_info = $this->getParentCommand((int) $process->pid);
-                                    if ($debug_apps) file_put_contents("/tmp/gpuappsnv","$ppid_info\n",FILE_APPEND);
-                                    if (stripos($ppid_info, $app) === false) {
-                                        // We didn't match the application name in the arguments, no match
-                                        if ($debug_apps) file_put_contents("/tmp/gpuappsnv","not found app $app\n",FILE_APPEND);
-                                        continue 2;
-                                    } else if ($debug_apps) file_put_contents("/tmp/gpuappsnv","\nfound app $app\n",FILE_APPEND);
-                                }
-                            }
-                        }
-                    }
-                    $this->pageData[$app . 'using'] = true;
-                    $this->pageData[$app . 'mem'] += (int)$this->stripText(' MiB', $process->used_memory);
-                    $this->pageData[$app . 'count']++;
-                    if ($debug_apps) file_put_contents("/tmp/gpuappsnv","\nfound app $app $command\n",FILE_APPEND);
-                    // If we match a more specific command/app to a process, continue on to the next process
-                    break 2;
-                }
-            }
+
+        $dockerInfo = null;
+        $controlGroup = $this->getControlGroup((int) $process['pid']);
+        $usedMemory = (int) $this->stripText(' MiB', $process['memory']);
+
+        if ($controlGroup && preg_match('/docker\/([a-z0-9]+)$/', $controlGroup, $matches)) {
+            $dockerInfo = $this->getDockerContainerInspect($matches[1]);
+        }
+
+        if (!$controlGroup || !$dockerInfo) {
+           if ($debug_apps) file_put_contents("/tmp/hostapps",json_encode($this->hostapps));
+            if (isset($this->hostapps[$process['name']])) $icon = $this->hostapps[$process['name']]; else $icon=Self::DOCKER_ICON_DEFAULT_PATH;
+            $active_app = [
+                'name' => (string) $process['name'],
+                'title' => (string) $process['name'],
+                'icon' => $icon,
+                'mem' => $usedMemory,
+                'count' => 1,
+            ];
+        } else {
+            $active_app = [
+                'name' => $dockerInfo['name'],
+                'title' => $dockerInfo['title'],
+                'icon' => $dockerInfo['icon'],
+                'mem' => $usedMemory,
+                'count' => 1,
+            ];
+        }
+
+        $index = array_search($active_app['name'], array_column($this->pageData['active_apps'], 'name'));
+
+        if ($index === false) {
+            $this->pageData['active_apps'][] = $active_app;
+        } else {
+            $this->pageData['active_apps'][$index]['mem'] += $usedMemory;
+            $this->pageData['active_apps'][$index]['count']++;
         }
     }
 
@@ -481,11 +449,11 @@ class Nvidia extends Main
             ];
 
             // Set App HW Usage Defaults
-            foreach (self::SUPPORTED_APPS AS $app => $process) {
-                $this->pageData[$app . "using"] = false;
-                $this->pageData[$app . "mem"] = 0;
-                $this->pageData[$app . "count"] = 0;
-            }
+            #foreach (self::SUPPORTED_APPS AS $app => $process) {
+            #    $this->pageData[$app . "using"] = false;
+            #    $this->pageData[$app . "mem"] = 0;
+            #    $this->pageData[$app . "count"] = 0;
+            #}
             if (isset($data->product_name)) {
                 $this->getProductName($data->product_name);
             }
@@ -510,13 +478,18 @@ class Nvidia extends Main
             }
             // For some reason, encoder_sessions->session_count is not reliable on my install, better to count processes
             if ($this->settings['DISPSESSIONS']) {
-                $this->pageData['appssupp'] = array_keys(self::SUPPORTED_APPS);
+                $this->pageData['active_apps'] = [];
                 if (isset($data->processes->process_info)) {
                     $this->pageData['sessions'] = count($data->processes->process_info);
                     if ($this->pageData['sessions'] > 0) {
                         foreach ($data->processes->children() as $process) {
                             if (isset($process->process_name)) {
-                                $this->detectApplication($process);
+                                $process_array = [
+                                    "pid" => $process->pid,
+                                    "name" => strtolower(pathinfo($process->process_name,PATHINFO_BASENAME)),
+                                    "memory" => $process->used_memory
+                                ];
+                                $this->detectApplication($process_array);
                             }
                         }
                     }
