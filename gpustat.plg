@@ -16,7 +16,7 @@
     name="&name;"
     author="&author;"
     version="&version;"
-    min="6.7.1"
+    min="6.12.0"
     support="https://forums.unraid.net/topic/89453-plugin-gpu-statistics/"
     icon="icon-hardware"
     launch="&launch;"

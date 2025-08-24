@@ -43,6 +43,7 @@ class Main
         const HOST_APPS = [ 
         'xorg'              => ['/plugins/gpustat/images/xorg.png'],
         'qemu-system-x86'   => ['/plugins/gpustat/images/qemu.png'],
+        'firefox-bin'       => ['/plugins/gpustat/images/firefox-bin.png'],
 
     ];
 
@@ -424,7 +425,7 @@ class Main
 
         if (!$controlGroup || !$dockerInfo) {
             file_put_contents("/tmp/hostapps",json_encode($this->hostapps));
-            if (isset($this->hostapps[$process['name']])) $icon = $this->hostapps[$process['name']]; else $icon=Self::DOCKER_ICON_DEFAULT_PATH;
+            if (isset($this->hostapps[strtolower($process['name'])])) $icon = $this->hostapps[strtolower($process['name'])]; else $icon=Self::DOCKER_ICON_DEFAULT_PATH;
             $active_app = [
                 'name' => (string) $process['name'],
                 'title' => (string) $process['name'],
