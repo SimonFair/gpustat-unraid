@@ -407,13 +407,15 @@ class Intel extends Main
                     $columns = preg_split('/\s+/', trim($line));
                     if (count($columns) >= 6) {
                         list($command, $tgid, $dev, $master, $a, $uid) = $columns;
+                        $totalmem['system']['total']= 0;
                         $clients[$tgid] = [
                             "name" => $command,
                             "pid" => $tgid,
                             "gpu_instance_id" => "N/A",
                             "compute_instance_id" => "N/A",
                             "type" => "C",
-                            "used_memory" => "N/A"
+                            "used_memory" => "N/A",
+                            "memory" => $totalmem
                         ];
                     }
                 }

@@ -44,7 +44,6 @@ class Main
         'xorg'              => ['/plugins/gpustat/images/xorg.png'],
         'qemu-system-x86'   => ['/plugins/gpustat/images/qemu.png'],
         'firefox-bin'       => ['/plugins/gpustat/images/firefox-bin.png'],
-
     ];
 
     /**
@@ -417,7 +416,7 @@ class Main
     {
         $dockerInfo = null;
         $controlGroup = $this->getControlGroup((int) $process['pid']);
-        $usedMemory = (int) $this->stripText(' MiB', $process['memory']);
+        $usedMemory = (int) $this->stripText(' MiB', $process['memory'] ?? '');
 
         if ($controlGroup && preg_match('/docker\/([a-z0-9]+)$/', $controlGroup, $matches)) {
             $dockerInfo = $this->getDockerContainerInspect($matches[1]);
