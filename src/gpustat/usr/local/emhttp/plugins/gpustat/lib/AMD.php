@@ -35,7 +35,7 @@ class AMD extends Main
     const CMD_UTILITY = 'radeontop';
     const INVENTORY_UTILITY = 'lspci';
     const INVENTORY_PARAM = '| grep VGA';
-    const INVENTORY_PARAMm = " -Dmm | grep VGA";
+    const INVENTORY_PARAMm = " -Dmm | grep 'VGA\|Display controller'";
     const INVENTORY_REGEX =
         '/^(?P<busid>[0-9a-f]{2}).*\[AMD(\/ATI)?\]\s+(?P<model>.+)\s+(\[(?P<product>.+)\]|\()/imU';
 
