@@ -41,35 +41,6 @@ class Intel extends Main
         '/VGA.+:\s+Intel\s+Corporation\s+(?P<model>.*)\s+(\[|Family|Integrated|Graphics|Controller|Series|\()/iU';
     const STATISTICS_PARAM = '-J -s 1000 -n 2 -d  pci:slot="';
     const STATISTICS_WRAPPER = 'timeout -k ';
-    const SUPPORTED_APPS = [ // Order here is important because some apps use the same binaries -- order should be more specific to less
-        'plex'        => ['Plex Transcoder'],
-        'jellyfin'    => ['ffmpeg','jellyfin'],
-        'handbrake'   => ['ghb'],
-        'emby'        => ['ffmpeg', 'EmbyServer'],
-        'tdarr'       => ['ffmpeg', 'HandbrakeCLI'],
-        'unmanic'     => ['ffmpeg'],
-        'dizquetv'    => ['ffmpeg'],
-        'ersatztv'    => ['ffmpeg'],
-        'fileflows'   => ['ffmpeg'],
-        'frigate'     => ['ffmpeg'],
-        'threadfin'   => ['ffmpeg','Threadfin'],
-        'tunarr'      => ['ffmpeg','tunarr'],
-        'codeproject' => ['python3.8'],
-        'deepstack'   => ['python3'],
-        'nsfminer'    => ['nsfminer'],
-        'shinobipro'  => ['shinobi'],
-        'foldinghome' => ['FahCore'],
-        'compreface'  => ['uwsgi'],
-        'ollama'      => ['ollama_llama_server'],
-        'immich'      => ['immich'],
-        'localai'     => ['localai'],
-        'chia'        => ['chia'],
-        'mmx'         => ['mmx_node'],
-        'subspace'    => ['subspace'],
-        'xorg'        => ['Xorg'],
-        'qemu'        => ['qemu'],
-
-    ];
     /**
      * Intel constructor.
      * @param array $settings
@@ -78,59 +49,6 @@ class Intel extends Main
     {
         $settings += ['cmd' => self::CMD_UTILITY];
         parent::__construct($settings);
-    }
-
-        /**
-     * Iterates supported applications and their respective commands to match against processes using GPU hardware
-     *
-     * @param array $process
-     */
-    private function detectApplication (array $process)
-    {
-        $debug_apps = is_file("/tmp/gpustatapps") ?? false;
-        if ($debug_apps) file_put_contents("/tmp/gpuappsint","");
-        foreach (self::SUPPORTED_APPS as $app => $commands) {
-            foreach ($commands as $command) {
-                if (strpos($process['name'], $command) !== false) {
-                    // For Handbrake/ffmpeg: arguments tell us which application called it
-                    if (in_array($command, ['ffmpeg', 'HandbrakeCLI', 'python3.8','python3'])) {
-                        if (isset($process['pid'])) {
-                            $pid_info = $this->getFullCommand((int) $process['pid']);
-                            if ($debug_apps) file_put_contents("/tmp/gpuappsint","$command\n$pid_info\n",FILE_APPEND);
-                            if (!empty($pid_info) && strlen($pid_info) > 0) {
-                                if ($command === 'python3.8') {
-                                    // CodeProject doesn't have any signifier in the full command output
-                                    if (strpos($pid_info, '/ObjectDetectionYolo/detect_adapter.py') === false) {
-                                        continue 2;
-                                    }
-                                } elseif ($command === 'python3') {
-                                    // Deepstack doesn't have any signifier in the full command output
-                                    if (strpos($pid_info, '/app/intelligencelayer/shared') === false) {
-                                        continue 2;
-                                    }
-                                } elseif (stripos($pid_info, strtolower($app)) === false) {
-                                    // Try to match the app name in the parent process
-                                    $ppid_info = $this->getParentCommand((int) $process['pid']);
-                                    if ($debug_apps) file_put_contents("/tmp/gpuappsint","$ppid_info\n",FILE_APPEND);
-                                    if (stripos($ppid_info, $app) === false) {
-                                        // We didn't match the application name in the arguments, no match
-                                        if ($debug_apps) file_put_contents("/tmp/gpuappsint","not found app $app\n",FILE_APPEND);
-                                        continue 2;
-                                    } else if ($debug_apps) file_put_contents("/tmp/gpuappsint","\nfound app $app\n",FILE_APPEND);
-                                }
-                            }
-                        }
-                    }
-                    $this->pageData[$app . 'using'] = true;
-                    #$this->pageData[$app . 'mem'] += (int)$this->stripText(' MiB', $process->used_memory);
-                    if (isset($process['memory']['system']['total'])) $this->pageData[$app . 'mem'] = round($process['memory']['system']['total']/1024/1024,2); else $this->pageData[$app . 'mem'] = 0;
-                    if (isset($this->pageData[$app . 'count'])) $this->pageData[$app . 'count']++; else $this->pageData[$app . 'count'] = 1;
-                    if ($debug_apps) file_put_contents("/tmp/gpuappsint","\nfound app $app $command\n",FILE_APPEND);
-                    // If we match a more specific command/app to a process, continue on to the next process
-                    break 2;
-                }
-            }
-        }
     }
 
     /**
@@ -363,15 +281,19 @@ class Intel extends Main
                 }
             }
             if ($this->settings['DISPSESSIONS']) {
-                $this->pageData['appssupp'] = array_keys(self::SUPPORTED_APPS);
-
+            $this->pageData['active_apps'] = [];
                 if (isset($data['clients']) && count($data['clients']) > 0) {
                     $this->pageData['sessions'] = count($data['clients']);
                     if ($this->pageData['sessions'] > 0) {
                         $clientRender = $clientBlitter = $clientVideo = $clientVideoEnh = $clientCompute = 0 ;
                         foreach ($data['clients'] as $id => $process) {
                             if (isset($process["name"])) {
-                                $this->detectApplication($process);
+                                $process_array = [
+                                    "pid" => $process["pid"],
+                                    "name" => $process["name"],
+                                    "memory" => $process["memory"]['system']['total']/(1024*1024),
+                                ];
+                                $this->detectApplication($process_array);
                                 if (isset($process['engine-classes']['Render/3D']['busy'])) $clientRender += $process['engine-classes']['Render/3D']['busy'];
                                 if (isset($process['engine-classes']['Blitter']['busy'])) $clientBlitter += $process['engine-classes']['Blitter']['busy'];
                                 if (isset($process['engine-classes']['Video']['busy'])) $clientVideo += $process['engine-classes']['Video']['busy'];
@@ -485,13 +407,15 @@ class Intel extends Main
                     $columns = preg_split('/\s+/', trim($line));
                     if (count($columns) >= 6) {
                         list($command, $tgid, $dev, $master, $a, $uid) = $columns;
+                        $totalmem['system']['total']= 0;
                         $clients[$tgid] = [
                             "name" => $command,
                             "pid" => $tgid,
                             "gpu_instance_id" => "N/A",
                             "compute_instance_id" => "N/A",
                             "type" => "C",
-                            "used_memory" => "N/A"
+                            "used_memory" => "N/A",
+                            "memory" => $totalmem
                         ];
                     }
                 }

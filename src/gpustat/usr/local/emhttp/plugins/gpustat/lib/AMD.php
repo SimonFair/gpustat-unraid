@@ -35,7 +35,7 @@ class AMD extends Main
     const CMD_UTILITY = 'radeontop';
     const INVENTORY_UTILITY = 'lspci';
     const INVENTORY_PARAM = '| grep VGA';
-    const INVENTORY_PARAMm = " -Dmm | grep VGA";
+    const INVENTORY_PARAMm = " -Dmm | grep 'VGA\|Display controller'";
     const INVENTORY_REGEX =
         '/^(?P<busid>[0-9a-f]{2}).*\[AMD(\/ATI)?\]\s+(?P<model>.+)\s+(\[(?P<product>.+)\]|\()/imU';
 
@@ -59,35 +59,7 @@ class AMD extends Main
         'uvd'   => ['uvd'],
         'vce0'  => ['vce'],
     ];
-    const SUPPORTED_APPS = [ // Order here is important because some apps use the same binaries -- order should be more specific to less
-        'plex'        => ['Plex Transcoder'],
-        'jellyfin'    => ['ffmpeg','jellyfin'],
-        'handbrake'   => ['/usr/bin/HandBrakeCLI'],
-        'emby'        => ['ffmpeg', 'EmbyServer'],
-        'tdarr'       => ['ffmpeg', 'HandbrakeCLI'],
-        'unmanic'     => ['ffmpeg'],
-        'dizquetv'    => ['ffmpeg'],
-        'ersatztv'    => ['ffmpeg'],
-        'fileflows'   => ['ffmpeg'],
-        'frigate'     => ['ffmpeg'],
-        'threadfin'   => ['ffmpeg','Threadfin'],
-        'tunarr'      => ['ffmpeg','tunarr'],
-        'codeproject' => ['python3.8'],
-        'deepstack'   => ['python3'],
-        'nsfminer'    => ['nsfminer'],
-        'shinobipro'  => ['shinobi'],
-        'foldinghome' => ['FahCore'],
-        'compreface'  => ['uwsgi'],
-        'ollama'      => ['ollama_llama_server'],
-        'immich'      => ['immich'],
-        'localai'     => ['localai'],
-        'chia'        => ['chia'],
-        'mmx'         => ['mmx_node'],
-        'subspace'    => ['subspace'],
-        'xorg'        => ['Xorg'],
-        'qemu'        => ['qemu'],
 
-    ];
     const TEMP_UTILITY = 'sensors';
     const TEMP_PARAM = '-j 2>errors';
 
@@ -101,58 +73,6 @@ class AMD extends Main
         parent::__construct($settings);
     }
     
-        /**
-     * Iterates supported applications and their respective commands to match against processes using GPU hardware
-     *
-     * @param array $process
-     */
-    private function detectApplication (array $process)
-    {
-        $debug_apps = is_file("/tmp/gpustatapps") ?? false;
-        if ($debug_apps) file_put_contents("/tmp/gpuappsint","");
-        foreach (self::SUPPORTED_APPS as $app => $commands) {
-            foreach ($commands as $command) {
-                if (strpos($process['name'], $command) !== false) {
-                    // For Handbrake/ffmpeg: arguments tell us which application called it
-                    if (in_array($command, ['ffmpeg', 'HandbrakeCLI', 'python3.8','python3'])) {
-                        if (isset($process['pid'])) {
-                            $pid_info = $this->getFullCommand((int) $process['pid']);
-                            if ($debug_apps) file_put_contents("/tmp/gpuappsint","$command\n$pid_info\n",FILE_APPEND);
-                            if (!empty($pid_info) && strlen($pid_info) > 0) {
-                                if ($command === 'python3.8') {
-                                    // CodeProject doesn't have any signifier in the full command output
-                                    if (strpos($pid_info, '/ObjectDetectionYolo/detect_adapter.py') === false) {
-                                        continue 2;
-                                    }
-                                } elseif ($command === 'python3') {
-                                    // Deepstack doesn't have any signifier in the full command output
-                                    if (strpos($pid_info, '/app/intelligencelayer/shared') === false) {
-                                        continue 2;
-                                    }
-                                } elseif (stripos($pid_info, strtolower($app)) === false) {
-                                    // Try to match the app name in the parent process
-                                    $ppid_info = $this->getParentCommand((int) $process['pid']);
-                                    if ($debug_apps) file_put_contents("/tmp/gpuappsint","$ppid_info\n",FILE_APPEND);
-                                    if (stripos($ppid_info, $app) === false) {
-                                        // We didn't match the application name in the arguments, no match
-                                        if ($debug_apps) file_put_contents("/tmp/gpuappsint","not found app $app\n",FILE_APPEND);
-                                        continue 2;
-                                    } else if ($debug_apps) file_put_contents("/tmp/gpuappsint","\nfound app $app\n",FILE_APPEND);
-                                }
-                            }
-                        }
-                    }
-                    $this->pageData[$app . 'using'] = true;
-                    #$this->pageData[$app . 'mem'] += (int)$this->stripText(' MiB', $process->used_memory);
-                    $this->pageData[$app . 'mem'] = 0;
-                    if (isset($this->pageData[$app . 'count'])) $this->pageData[$app . 'count']++; else $this->pageData[$app . 'count'] = 1;
-                    if ($debug_apps) file_put_contents("/tmp/gpuappsint","\nfound app $app $command\n",FILE_APPEND);
-                    // If we match a more specific command/app to a process, continue on to the next process
-                    break 2;
-                }
-            }
-        }
-    }
     /**
      * Retrieves AMD inventory using lspci and returns an array
      *
@@ -386,7 +306,7 @@ class AMD extends Main
         $this->pageData = array_merge($this->pageData, $this->getSensorData());
 
         if ($this->settings['DISPSESSIONS']) {
-            $this->pageData['appssupp'] = array_keys(self::SUPPORTED_APPS);
+            $this->pageData['active_apps'] = [];
             $clientsPath = "/sys/kernel/debug/dri/0000:{$this->settings['PCIID']}/clients";
             $clients = [];
     

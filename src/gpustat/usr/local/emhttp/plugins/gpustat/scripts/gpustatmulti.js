@@ -99,6 +99,31 @@ const gpustat_statusm = (input) => {
                     });
                 }
 
+                if (data["active_apps"]) {
+                    const appList = [];
+                    $('.gpu-active-apps' + panel + ' .gpu-img-span').each(function () {
+                        appList.push($(this).data('name'));
+                    });
+                    const active_apps = [];
+                    data["active_apps"].forEach(function (app) {
+                        active_apps.push(app.name);
+                        if (appList.includes(app.name)) {
+                            const title = 'App: ' + app.title + ' - Count: ' + app.count + ' - Memory: ' + app.mem + 'MB';
+                            $('.gpu-active-apps' + panel + ' td span[data-name="' + app.name + '"] img').attr('title', title);
+                                } else {
+                                    const title = 'App: ' + app.title + ' - Count: ' + app.count + ' - Memory: ' + app.mem + 'MB';
+                                    const img = $('<img class="gpu-image" src="' + app.icon + '" title="' + title + '">');
+                                    const span = $('<span class="gpu-img-span" data-name="' + app.name + '"></span>');
+                                    span.append(img);
+                                    $('.gpu-active-apps' + panel + ' td').append(span);
+                                }
+                            });
+                            $('.gpu-active-apps' + panel + ' td span.gpu-img-span').each(function () {
+                                if (!active_apps.includes($(this).data('name')))
+                                    $(this).remove();
+                            });
+                        }
+                        
                 $.each(data, function (key, data) {
                     if (key == "error") {   
                         toggleVFIO(true,panel,false) ;
