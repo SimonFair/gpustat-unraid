@@ -4,7 +4,7 @@
 <!ENTITY author    "SimonFair">
 <!ENTITY version   "2025.09.17">
 <!ENTITY launch    "Settings/GPUStatSettings">
-<!ENTITY gitURL    "https://raw.githubusercontent.com/SimonFair/&name;-unraid/Dynamic-App-Support">
+<!ENTITY gitURL    "https://raw.githubusercontent.com/SimonFair/&name;-unraid/master">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
 <!ENTITY pkgURL    "&gitURL;/pkg">
 <!ENTITY plgPATH   "/boot/config/plugins/&name;">
@@ -27,7 +27,7 @@
   MIT License
 
   Copyright (c) 2020-2022 b3rs3rk
-  Copyright (c) 2023-2024 SimonFair
+  Copyright (c) 2023-2025 SimonFair
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -49,6 +49,10 @@
 -->
 
 <CHANGES>
+###2025.11.23
+
+- Update to dynamic app detection.
+
 ###2025.08.05
 
 - Fix 7.2 Dashboard panels.
