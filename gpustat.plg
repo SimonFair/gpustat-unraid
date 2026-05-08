@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "gpustat">
 <!ENTITY author    "SimonFair">
-<!ENTITY version   "2025.11.23">
+<!ENTITY version   "2026.05.08">
 <!ENTITY launch    "Settings/GPUStatSettings">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/SimonFair/&name;-unraid/master">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
@@ -49,6 +49,10 @@
 -->
 
 <CHANGES>
+###2026.05.08
+
+- Add inital support using qmassa for XE stats.
+
 ###2025.11.23
 
 - Update to dynamic app detection.
