@@ -1,8 +1,8 @@
 <?xml version='1.0' standalone='yes'?>
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "gpustat">
-<!ENTITY author    "b3rs3rk">
-<!ENTITY version   "2023.10.08">
+<!ENTITY author    "SimonFair">
+<!ENTITY version   "2026.05.08">
 <!ENTITY launch    "Settings/GPUStatSettings">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/SimonFair/&name;-unraid/master">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
@@ -16,7 +16,7 @@
     name="&name;"
     author="&author;"
     version="&version;"
-    min="6.7.1"
+    min="6.12.0"
     support="https://forums.unraid.net/topic/89453-plugin-gpu-statistics/"
     icon="icon-hardware"
     launch="&launch;"
@@ -27,6 +27,7 @@
   MIT License
 
   Copyright (c) 2020-2022 b3rs3rk
+  Copyright (c) 2023-2025 SimonFair
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -48,9 +49,197 @@
 -->
 
 <CHANGES>
-###2023-10-08
+###2026.05.08
 
-- Add VFIO detection support and hide metrics.
+- Add inital support using qmassa for XE stats.
+
+###2025.11.23
+
+- Update to dynamic app detection.
+
+###2025.08.05
+
+- Fix 7.2 Dashboard panels.
+
+###2025.06.03
+
+- Fix Intel power set to one decimal place.
+
+###2025.06.02
+
+- Fix AMD Power readings for different card types.
+- Fix Compute Bar
+- Fix CodeProject detection
+
+###2025.05.29
+
+- Fix Client usage
+- Fix AMD power readings
+- Fix revised minimise for 7.1
+
+###2025.05.17
+
+- Fix Update column width for GPU name.
+- Fix minimise on dashboard for 7.1+
+- Fix revise checks for Immich and Ollama for NV cards.
+- Add Pidcheck for users to run when new apps need to be added. example command php -f /usr/local/emhttp/plugins/gpustat/lib/Pidcheck 265046
+
+###2025.04.27
+
+- Fix XE display issue if not processes running
+- Fix XE GPU name if no Intel top installed.
+
+###2025.04.26
+
+- Add option for NV apps debug file.
+
+###2025.04.01
+
+- Fix output for some igpus.
+- Add Temp of cards if provided when on kernel 6.14 or will display N/A
+
+###2025.03.29
+
+- Chg Use new -n intel_gpu_top option for more reliable data gather. This removes the top timers requirements.
+- N.B must be running the latest intel_gpu_top from ich777 i.e 2025.03.15 or later.
+
+###2025.03.28
+
+- Add Fan for Intel DGPU.
+- Fix Handbrake Icon for Intel.
+- Add Metrics for A310s and others that report via clients.
+- Add Memory for Processes(Intel)
+- Add Compute Bar(Intel) needs to be enabled in settings.
+
+###2025.03.18
+
+- Fix driver detection method
+- Fix Nvidia PCI details if bound to vfio.
+
+###2025.03.12
+
+- Fix driver values
+
+###2025-03-11a
+
+- Add Initial XE and Nouveau support, metrics are limited.(Apps, Temps and Fan)
+- Add App support for AMD GPUs - Tweaks may be required.
+
+###2025-03-01
+
+- Fix Nvidia power display with new driver.
+- Add Intel processes.
+
+###2024-12-14
+
+- add QEMU app support
+
+###2024-12-03
+
+- re package
+
+###2024-11-28
+
+- plg file updates.
+
+###2024-11-18
+
+- fix chrome browser issue for select in settings.
+
+###2024-11-07
+
+- fix config path
+- chg State Threshold layout for Nvidia GPUs.
+
+###2024-10-27
+
+- add tunarr
+
+###2024-10-25a
+
+- fix parent pid check so Emby is detected.
+- php and max util check updates.
+
+###2024-10-25
+
+- add apps debug options, defaults off need to edit Intel or Nvidia lib files to make =true.
+
+###2024-10-22a
+
+- fix Jellyfin
+
+###2024-10-22
+
+- add Intel use max util from the 4 bars as title util.
+
+###2024-10-21
+
+- add Xorg App
+- fix Emby
+
+###2024-10-16
+
+- add Intel timers to settings
+- fix Nvidia model if not tools loaded.
+
+###2024-10-13
+
+- add icon to next to VM.
+
+###2024-10-12a
+
+- remove dependency for gpu tools.
+
+###2024-10-12
+
+- add Show which VM is using GPU.
+
+###2024-09-26
+
+- add Chia, mmx and Subspace for NV(PR from tjb-altf4 thanks)
+- add revised Ollama icon(PR from  nwithan8)
+- add App support for Intel. Some apps may need revision to show.
+
+###2024-08-26a
+
+- add LocalAI app for nvidia GPU - PR from  nwithan8.
+- add Immich for nvidia GPU - PR from  nwithan8.
+
+###2024-08-26
+
+- Fix timer abs values
+- add Ollama app for nvidia GPU - PR from  nwithan8.
+
+###2024-06-21
+
+- Fixes PHP errors in AMD lib.
+
+###2024-03-16
+
+- Change Intel processsing thanks to ich777.
+- Add Compreface as an app for Nvidia thanks to Corgan.
+- Set minimum refresh to 2 seconds in settings.
+
+###2023-12-07
+
+- Add Intel gpu top timer override value.
+
+###2023-11-09
+
+- Fix VFIO check function.
+
+###2023-10-29d
+
+- Fix passing null to checkVFIO function.
+- Fix Icon issue.
+
+###2023-10-29a
+
+- Allow selection of NVidia GPU is driver not installed.
+- Show Errors if Vendor commands missing or invalid data
+- Add support for codeproject app(chillr21)
+- Add support for Threadfin. 
+- Fix dashboard panel display if minimised.
 
 ###2023-10-06
 
@@ -217,11 +406,18 @@ elif [ "$(which radeontop 2>/dev/null)" ] || [ -d /boot/config/plugins/radeontop
 else
     echo "********************************************************************"
     echo
-    echo "No vendor utilities found.  Plugin install terminated due to failed prerequisites."
+    echo "No vendor utilities found."
+    echo "Limited functions only i.e. if bound to vfio or a GPU active in a VM."
     echo
     echo "********************************************************************"
-    rm -rf /boot/config/plugins/&name;
-    exit 1
+fi
+
+# Check if UIREFRESHINT is at minimum 2000ms
+if [ -f /boot/config/plugins/gpustat/gpustat.cfg ]; then
+  REFRESH_INT=$(cat /boot/config/plugins/gpustat/gpustat.cfg | grep UIREFRESHINT | cut -d '=' -f2 | sed 's/[ "]//g')
+  if [ "${REFRESH_INT}" -lt 2000 ]; then
+    sed -i '/^UIREFRESHINT/c\UIREFRESHINT = 2000' /boot/config/plugins/gpustat/gpustat.cfg
+  fi
 fi
 
 </INLINE>
@@ -249,7 +445,7 @@ fi
     DISPTHROTTLE="1"
     DISPSESSIONS="1"
     UIREFRESH="1"
-    UIREFRESHINT="1000"
+    UIREFRESHINT="2000"
     DISPMEMUTIL="1"
     DISP3DRENDER="1"
     DISPBLITTER="1"
@@ -267,9 +463,16 @@ fi
     DISPDEPTHBLK="1"
     DISPCOLORBLK="1"
     DISPGFXTRANS="1"
+    IGTTIMER =".7 1.3"
    ]]>
   </INLINE>
  </FILE>
+
+<FILE Run="/bin/bash">
+ <INLINE>
+  rm -f $(ls &plgPATH;/&name;*.txz 2>/dev/null|grep -v '&version;')
+ </INLINE>
+</FILE>
 
   <!-- The 'remove' script. -->
   <FILE Run="/bin/bash" Method="remove">
