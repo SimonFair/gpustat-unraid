@@ -193,18 +193,348 @@ class Main
      * @param string $pciid
      * 
      */
+    private function parsePCIeAttrNumeric(string $attr, string $value): ?float
+    {
+        if ($attr === 'max_link_width' || $attr === 'current_link_width') {
+            return is_numeric($value) ? (float)$value : null;
+        }
+
+        if ($attr === 'max_link_speed' || $attr === 'current_link_speed') {
+            if (preg_match('/([0-9]+(?:\.[0-9]+)?)/', $value, $matches)) {
+                return (float)$matches[1];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Walk up PCI device tree and select the minimum pcieport value found.
+     * This mirrors nvtop behavior and avoids bogus endpoint self-reporting.
+     */
+    private function walkPCIeTree(string $device_path, string $attr): ?string {
+        $current_path = realpath($device_path) ?: $device_path;
+        $iterations = 0;
+        $max_iterations = 20;
+        $selectedRaw = null;
+        $selectedNumeric = null;
+
+        while ($iterations < $max_iterations) {
+            $driver_path = "$current_path/driver";
+            if (is_link($driver_path)) {
+                $driver = basename((string)readlink($driver_path));
+                if ($driver === 'pcieport') {
+                    $attr_path = "$current_path/$attr";
+                    if (is_file($attr_path)) {
+                        $rawValue = trim((string)file_get_contents($attr_path));
+                        if ($rawValue !== '') {
+                            $numeric = $this->parsePCIeAttrNumeric($attr, $rawValue);
+                            if ($numeric !== null) {
+                                if ($selectedNumeric === null || $numeric < $selectedNumeric) {
+                                    $selectedNumeric = $numeric;
+                                    $selectedRaw = $rawValue;
+                                }
+                            } elseif ($selectedRaw === null) {
+                                $selectedRaw = $rawValue;
+                            }
+                        }
+                    }
+                }
+            }
+
+            $parent_path = dirname($current_path);
+            if ($parent_path === '/sys/devices' || $parent_path === '/sys' || $parent_path === $current_path) {
+                break;
+            }
+
+            $current_path = $parent_path;
+            $iterations++;
+        }
+
+        return $selectedRaw;
+    }
+
+    /**
+     * Read PCIe link information from lspci LnkCap/LnkSta.
+     * Returns [max_speed, max_width, current_speed, current_width].
+     */
+    private function getPCIeFromLspci(string $pciid): ?array
+    {
+        $maxSpeed = $maxWidth = $currentSpeed = $currentWidth = null;
+
+        $shortPci = preg_replace('/^[0-9a-f]{4}:/i', '', $pciid);
+        $commands = [
+            sprintf('lspci -s %s -vv 2>/dev/null', escapeshellarg($pciid)),
+            sprintf('lspci -s %s -vv 2>/dev/null', escapeshellarg($shortPci)),
+            sprintf('lspci -D -s %s -vv 2>/dev/null', escapeshellarg($shortPci)),
+            sprintf('lspci -D -s %s -vv 2>/dev/null', escapeshellarg($pciid))
+        ];
+
+        foreach ($commands as $command) {
+            $output = shell_exec($command);
+            if (!$output) {
+                continue;
+            }
+
+            if ($maxSpeed === null && preg_match('/LnkCap:.*Speed\s*([0-9]+(?:\.[0-9]+)?\s*GT\/?s).*Width\s*x(\d+)/i', $output, $m)) {
+                $maxSpeed = trim($m[1]);
+                $maxWidth = $m[2];
+            }
+            if ($currentSpeed === null && preg_match('/LnkSta:.*Speed\s*([0-9]+(?:\.[0-9]+)?\s*GT\/?s).*Width\s*x(\d+)/i', $output, $m)) {
+                $currentSpeed = trim($m[1]);
+                $currentWidth = $m[2];
+            }
+
+            if ($maxSpeed !== null && $currentSpeed !== null) {
+                break;
+            }
+        }
+
+        if ($maxSpeed === null && $maxWidth === null && $currentSpeed === null && $currentWidth === null) {
+            return null;
+        }
+
+        return [$maxSpeed, $maxWidth, $currentSpeed, $currentWidth];
+    }
+
+    /**
+     * Walk PCI BDF ancestors from sysfs path and return best lspci link values.
+     * Useful when endpoint reports 1x Gen1 but upstream bridge has true link.
+     */
+    private function getPCIeFromLspciTree(string $pciid): ?array
+    {
+        $devicePath = realpath("/sys/bus/pci/devices/$pciid");
+        if ($devicePath === false) {
+            return null;
+        }
+
+        $parts = explode('/', $devicePath);
+        $bdfs = [];
+        foreach ($parts as $part) {
+            if (preg_match('/^[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-9]$/i', $part)) {
+                $bdfs[] = $part;
+            }
+        }
+
+        if (empty($bdfs)) {
+            return null;
+        }
+
+        $best = null;
+        $bestScore = -1.0;
+
+        // Prefer upstream first by checking from root-most BDF to endpoint.
+        foreach ($bdfs as $bdf) {
+            $lspci = $this->getPCIeFromLspci($bdf);
+            if ($lspci === null) {
+                continue;
+            }
+
+            [$maxSpeed, $maxWidth, $currentSpeed, $currentWidth] = $lspci;
+            $speedNum = $maxSpeed !== null ? $this->parsePCIeAttrNumeric('max_link_speed', $maxSpeed) : null;
+            $widthNum = $maxWidth !== null ? $this->parsePCIeAttrNumeric('max_link_width', $maxWidth) : null;
+            $score = (($speedNum ?? 0.0) * 100.0) + ($widthNum ?? 0.0);
+
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $best = [$maxSpeed, $maxWidth, $currentSpeed, $currentWidth, $bdf];
+            }
+        }
+
+        return $best;
+    }
+
+    /**
+     * Read PCIe link information from ancestor pcieport devices in sysfs.
+     * Returns the best (highest width/speed) ancestor values if found.
+     */
+    private function getPCIeFromAncestorSysfs(string $pciid): ?array
+    {
+        $devicePath = realpath("/sys/bus/pci/devices/$pciid");
+        if ($devicePath === false) {
+            return null;
+        }
+
+        $best = null;
+        $bestScore = -1.0;
+        $current = dirname($devicePath);
+        $iterations = 0;
+        $maxIterations = 20;
+
+        while ($iterations < $maxIterations) {
+            if ($current === '/sys/devices' || $current === '/sys' || $current === dirname($current)) {
+                break;
+            }
+
+            $driverPath = "$current/driver";
+            if (is_link($driverPath)) {
+                $driver = basename((string)readlink($driverPath));
+                if ($driver === 'pcieport') {
+                    $maxSpeed = is_file("$current/max_link_speed") ? trim((string)file_get_contents("$current/max_link_speed")) : null;
+                    $maxWidth = is_file("$current/max_link_width") ? trim((string)file_get_contents("$current/max_link_width")) : null;
+                    $currentSpeed = is_file("$current/current_link_speed") ? trim((string)file_get_contents("$current/current_link_speed")) : null;
+                    $currentWidth = is_file("$current/current_link_width") ? trim((string)file_get_contents("$current/current_link_width")) : null;
+
+                    $speedNum = $currentSpeed !== null ? $this->parsePCIeAttrNumeric('current_link_speed', $currentSpeed) : null;
+                    $widthNum = $currentWidth !== null ? $this->parsePCIeAttrNumeric('current_link_width', $currentWidth) : null;
+                    $score = (($speedNum ?? 0.0) * 100.0) + ($widthNum ?? 0.0);
+
+                    if ($score > $bestScore) {
+                        $bestScore = $score;
+                        $best = [$maxSpeed, $maxWidth, $currentSpeed, $currentWidth];
+                    }
+                }
+            }
+
+            $current = dirname($current);
+            $iterations++;
+        }
+
+        return $best;
+    }
+    
     protected function getPCIeBandwidth(string $pciid) {
         $sysfs_path = "/sys/bus/pci/devices/$pciid";
+        $driver = strtolower($this->getKernelDriver($pciid));
         
-        if (file_exists("$sysfs_path/max_link_speed") && file_exists("$sysfs_path/max_link_width")) {
-            $pciegen = trim(file_get_contents("$sysfs_path/max_link_speed"));
-            $this->pageData['pciegen'] = $this->get_pcie_gen($pciegen);
-            $pciegenmax = file_exists("$sysfs_path/current_link_speed") ? trim(file_get_contents("$sysfs_path/current_link_speed")) : "N/A";
-            $this->pageData['pciegenmax'] = $this->get_pcie_gen($pciegenmax);
-            $this->pageData['pciewidthmax'] = trim(file_get_contents("$sysfs_path/max_link_width"));
-            $this->pageData['pciewidth'] = file_exists("$sysfs_path/current_link_width") ? trim(file_get_contents("$sysfs_path/current_link_width")) : "N/A";  
-            $this->pageData['igpu'] = (strpos($pciid, "0000:00:") === 0) ? "1" : "0";
-        }  
+        if (!file_exists($sysfs_path)) {
+            return;
+        }
+        
+        // Try to read from PCIe bridge first (more accurate for Intel GPUs)
+        // Fallback to device itself if bridge not found
+        $max_speed = $this->walkPCIeTree($sysfs_path, 'max_link_speed');
+        if ($max_speed === null && file_exists("$sysfs_path/max_link_speed")) {
+            $max_speed = trim(file_get_contents("$sysfs_path/max_link_speed"));
+        }
+        
+        $max_width = $this->walkPCIeTree($sysfs_path, 'max_link_width');
+        if ($max_width === null && file_exists("$sysfs_path/max_link_width")) {
+            $max_width = trim(file_get_contents("$sysfs_path/max_link_width"));
+        }
+        
+        $current_speed = $this->walkPCIeTree($sysfs_path, 'current_link_speed');
+        if ($current_speed === null && file_exists("$sysfs_path/current_link_speed")) {
+            $current_speed = trim(file_get_contents("$sysfs_path/current_link_speed"));
+        }
+        
+        $current_width = $this->walkPCIeTree($sysfs_path, 'current_link_width');
+        if ($current_width === null && file_exists("$sysfs_path/current_link_width")) {
+            $current_width = trim(file_get_contents("$sysfs_path/current_link_width"));
+        }
+
+        $maxSpeedNumeric = $max_speed !== null ? $this->parsePCIeAttrNumeric('max_link_speed', $max_speed) : null;
+        $maxWidthNumeric = $max_width !== null ? $this->parsePCIeAttrNumeric('max_link_width', $max_width) : null;
+        $looksMisreported = ($maxSpeedNumeric !== null && $maxWidthNumeric !== null && $maxSpeedNumeric <= 2.5 && $maxWidthNumeric <= 1);
+
+        // If endpoint/primary walk reports the classic bad Gen1 x1, try better pcieport ancestor values.
+        if ($looksMisreported || $driver === 'xe') {
+            $ancestor = $this->getPCIeFromAncestorSysfs($pciid);
+            if ($ancestor !== null) {
+                [$aMaxSpeed, $aMaxWidth, $aCurrentSpeed, $aCurrentWidth] = $ancestor;
+                $ancestorMaxSpeedNum = $aMaxSpeed !== null ? $this->parsePCIeAttrNumeric('max_link_speed', $aMaxSpeed) : null;
+                $ancestorMaxWidthNum = $aMaxWidth !== null ? $this->parsePCIeAttrNumeric('max_link_width', $aMaxWidth) : null;
+
+                if ($looksMisreported ||
+                    (($ancestorMaxSpeedNum ?? 0) > ($maxSpeedNumeric ?? 0)) ||
+                    (($ancestorMaxWidthNum ?? 0) > ($maxWidthNumeric ?? 0))) {
+                    $max_speed = $aMaxSpeed ?? $max_speed;
+                    $max_width = $aMaxWidth ?? $max_width;
+                    $current_speed = $aCurrentSpeed ?? $current_speed;
+                    $current_width = $aCurrentWidth ?? $current_width;
+                }
+            }
+        }
+
+        // Fallback to lspci link data when sysfs is missing or clearly misreported.
+        $lspci = $this->getPCIeFromLspci($pciid);
+        if ($lspci !== null) {
+            [$lMaxSpeed, $lMaxWidth, $lCurrentSpeed, $lCurrentWidth] = $lspci;
+
+            // For XE, prefer lspci link data (matches nvtop output in practice).
+            if ($driver === 'xe') {
+                $max_speed = $lMaxSpeed ?? $max_speed;
+                $max_width = $lMaxWidth ?? $max_width;
+                $current_speed = $lCurrentSpeed ?? $current_speed;
+                $current_width = $lCurrentWidth ?? $current_width;
+            }
+
+            $maxSpeedNumeric = $max_speed !== null ? $this->parsePCIeAttrNumeric('max_link_speed', $max_speed) : null;
+            $maxWidthNumeric = $max_width !== null ? $this->parsePCIeAttrNumeric('max_link_width', $max_width) : null;
+
+            $looksMisreported = ($maxSpeedNumeric !== null && $maxWidthNumeric !== null && $maxSpeedNumeric <= 2.5 && $maxWidthNumeric <= 1);
+
+            if ($max_speed === null || $looksMisreported) {
+                $max_speed = $lMaxSpeed ?? $max_speed;
+            }
+            if ($max_width === null || $looksMisreported) {
+                $max_width = $lMaxWidth ?? $max_width;
+            }
+            if ($current_speed === null || $looksMisreported) {
+                $current_speed = $lCurrentSpeed ?? $current_speed;
+            }
+            if ($current_width === null || $looksMisreported) {
+                $current_width = $lCurrentWidth ?? $current_width;
+            }
+        }
+
+        // If still misreported on XE, walk lspci across full PCI ancestor tree and pick best link.
+        $maxSpeedNumeric = $max_speed !== null ? $this->parsePCIeAttrNumeric('max_link_speed', $max_speed) : null;
+        $maxWidthNumeric = $max_width !== null ? $this->parsePCIeAttrNumeric('max_link_width', $max_width) : null;
+        $stillMisreported = ($maxSpeedNumeric !== null && $maxWidthNumeric !== null && $maxSpeedNumeric <= 2.5 && $maxWidthNumeric <= 1);
+
+        $treeLspci = null;
+        if ($driver === 'xe' && $stillMisreported) {
+            $treeLspci = $this->getPCIeFromLspciTree($pciid);
+            if ($treeLspci !== null) {
+                [$tMaxSpeed, $tMaxWidth, $tCurrentSpeed, $tCurrentWidth] = $treeLspci;
+                $max_speed = $tMaxSpeed ?? $max_speed;
+                $max_width = $tMaxWidth ?? $max_width;
+                $current_speed = $tCurrentSpeed ?? $current_speed;
+                $current_width = $tCurrentWidth ?? $current_width;
+            }
+        }
+
+        if ($driver === 'xe') {
+            $debugFile = "/tmp/gpustat_pcie_debug_" . str_replace(':', '_', $pciid) . ".log";
+            $debug = [
+                'time' => date(DATE_RFC2822),
+                'pciid' => $pciid,
+                'driver' => $driver,
+                'selected' => [
+                    'max_speed' => $max_speed,
+                    'max_width' => $max_width,
+                    'current_speed' => $current_speed,
+                    'current_width' => $current_width
+                ],
+                'source_lspci' => $lspci,
+                'source_tree_lspci' => $treeLspci
+            ];
+            @file_put_contents($debugFile, json_encode($debug, JSON_PRETTY_PRINT));
+        }
+        
+        // Set page data
+        if ($max_speed !== null) {
+            $this->pageData['pciegen'] = $this->get_pcie_gen($max_speed);
+        }
+        
+        if ($current_speed !== null) {
+            $this->pageData['pciegenmax'] = $this->get_pcie_gen($current_speed);
+        } else {
+            $this->pageData['pciegenmax'] = "N/A";
+        }
+        
+        if ($max_width !== null) {
+            $this->pageData['pciewidthmax'] = $max_width;
+        }
+        
+        if ($current_width !== null) {
+            $this->pageData['pciewidth'] = $current_width;
+        } else {
+            $this->pageData['pciewidth'] = "N/A";
+        }
+        
+        $this->pageData['igpu'] = (strpos($pciid, "0000:00:") === 0) ? "1" : "0";
     }
 
     /**
@@ -223,7 +553,22 @@ class Main
             "32.0 GT/s PCIe" => 5,
             "64.0 GT/s PCIe" => 6
         ];
-        return $speed_map[$speed] ?? $speed;
+        if (isset($speed_map[$speed])) {
+            return $speed_map[$speed];
+        }
+
+        // Handle variants such as "16.0 GT/s", "16.0GT/s", or extra suffixes.
+        if (preg_match('/([0-9]+(?:\.[0-9]+)?)\s*GT\/s/i', $speed, $matches)) {
+            $gt = (float)$matches[1];
+            if ($gt <= 2.5) return 1;
+            if ($gt <= 5.0) return 2;
+            if ($gt <= 8.0) return 3;
+            if ($gt <= 16.0) return 4;
+            if ($gt <= 32.0) return 5;
+            if ($gt <= 64.0) return 6;
+        }
+
+        return $speed;
     }
 
     /**
