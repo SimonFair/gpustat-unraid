@@ -65,11 +65,59 @@ const gpustat_statusm = (input) => {
                         break;
                     case 'Intel':
                         // Intel Slider Bars
-                        $('.gpu-fanbar'+panel).removeAttr('style').css('width', parseInt(data["fan"] / data["fanmax"] * 100) + "%");
-                        let intelbars = ['3drender', 'blitter', 'video', 'videnh', 'powerutil', 'compute'];
+                        const toPercentWidth = (value) => {
+                            if (value === undefined || value === null) return '0%';
+                            if (typeof value === 'number') {
+                                const clamped = Math.max(0, Math.min(100, value));
+                                return clamped + '%';
+                            }
+                            const str = String(value).trim();
+                            const match = str.match(/([0-9]+(?:\.[0-9]+)?)/);
+                            if (!match) return '0%';
+                            const numeric = parseFloat(match[1]);
+                            if (!Number.isFinite(numeric)) return '0%';
+                            const clamped = Math.max(0, Math.min(100, numeric));
+                            return clamped + '%';
+                        };
+
+                        const fanValue = parseFloat(data["fan"]);
+                        const fanMax = parseFloat(data["fanmax"]);
+                        const fanWidth = (Number.isFinite(fanValue) && Number.isFinite(fanMax) && fanMax > 0)
+                            ? ((fanValue / fanMax) * 100)
+                            : 0;
+                        $('.gpu-fanbar'+panel).removeAttr('style').css('width', toPercentWidth(fanWidth));
+                        let intelbars = ['3drender', 'blitter', 'video', 'videnh', 'powerutil', 'compute', 'memutil'];
                         intelbars.forEach(function (metric) {
-                            $('.gpu-'+metric+'bar'+panel).removeAttr('style').css('width', data[metric]);
+                            $('.gpu-'+metric+'bar'+panel).removeAttr('style').css('width', toPercentWidth(data[metric]));
                         });
+                        if (data["memutil"] !== undefined) {
+                            $('.gpu-memused'+panel).html(data["memutil"]);
+                        }
+                        if (data["memtotal"] !== undefined && data["memtotal"] !== null && data["memtotal"] !== 'N/A') {
+                            const memTotalMiB = parseFloat(data["memtotal"]);
+                            if (Number.isFinite(memTotalMiB) && memTotalMiB > 0) {
+                                const memTotalGiB = (memTotalMiB / 1024).toFixed(1);
+                                $('.gpu-memtitle'+panel).text('Memory Usage (' + memTotalGiB + ' GiB)');
+
+                                const memUsedMiB = parseFloat(data["memusedmb"]);
+                                if (Number.isFinite(memUsedMiB) && memUsedMiB >= 0) {
+                                    const tooltip = 'Used ' + memUsedMiB.toFixed(1) + ' MiB / ' + memTotalGiB + ' GiB';
+                                    $('.gpu-memutil'+panel).attr('title', tooltip);
+                                    $('.gpu-memused'+panel).attr('title', tooltip);
+                                } else {
+                                    $('.gpu-memutil'+panel).removeAttr('title');
+                                    $('.gpu-memused'+panel).removeAttr('title');
+                                }
+                            } else {
+                                $('.gpu-memtitle'+panel).text('Memory Usage');
+                                $('.gpu-memutil'+panel).removeAttr('title');
+                                $('.gpu-memused'+panel).removeAttr('title');
+                            }
+                        } else {
+                            $('.gpu-memtitle'+panel).text('Memory Usage');
+                            $('.gpu-memutil'+panel).removeAttr('title');
+                            $('.gpu-memused'+panel).removeAttr('title');
+                        }
                         break;
                     case 'AMD':
                         $('.gpu-powerbar'+panel).removeAttr('style').css('width', parseInt(data["power"].replace("W","") / data["powermax"] * 100) + "%");
@@ -146,8 +194,11 @@ const gpustat_statusm = (input) => {
             }
             if (data["igpu"] == "1") {
                 $('.nopcie'+panel).hide();
+                $('.intel-memrow'+panel).hide();
+                $('.gpu-memutilbar'+panel).removeAttr('style').css('width', '0%');
             } else {
                 $('.nopcie'+panel).show();
+                $('.intel-memrow'+panel).show();
             }
             // Prefer file value if both cookie and file exist
             var hidden = (typeof cookie !== 'undefined' && cookie.hidden_content) 

@@ -41,6 +41,9 @@ class Intel extends Main
         '/VGA.+:\s+Intel\s+Corporation\s+(?P<model>.*)\s+(\[|Family|Integrated|Graphics|Controller|Series|\()/iU';
     const STATISTICS_PARAM = '-J -s 1000 -n 2 -d  pci:slot="';
     const STATISTICS_WRAPPER = 'timeout -k ';
+    const QMASSA_CMD = 'qmassa';
+    const QMASSA_TIMEOUT = 10; // seconds - increased for GPU initialization
+    
     /**
      * Intel constructor.
      * @param array $settings
@@ -49,6 +52,423 @@ class Intel extends Main
     {
         $settings += ['cmd' => self::CMD_UTILITY];
         parent::__construct($settings);
+    }
+
+    /**
+     * Hide internal collection tools from displayed app/session lists.
+     */
+    private function isExcludedClientProcess(?string $name): bool
+    {
+        if ($name === null) {
+            return false;
+        }
+
+        $processName = strtolower(trim($name));
+        return $processName === 'qmassa' || strpos($processName, '/qmassa') !== false;
+    }
+
+    /**
+     * Read Intel dGPU package/card power limits from hwmon and return max limit in watts.
+     */
+    private function getIntelPowerLimitWatts(string $pciId): ?float
+    {
+        $candidates = [
+            "power1_max",
+            "power2_max",
+            "power1_cap",
+            "power2_cap",
+            "power1_crit",
+            "power2_crit",
+            "power1_rated_max",
+            "power2_rated_max"
+        ];
+
+        $limits = [];
+        foreach ($candidates as $entry) {
+            $paths = glob("/sys/bus/pci/devices/$pciId/hwmon/*/$entry");
+            if (!$paths) {
+                continue;
+            }
+            foreach ($paths as $path) {
+                if (!is_file($path)) {
+                    continue;
+                }
+                $raw = trim((string)@file_get_contents($path));
+                if ($raw === '' || !is_numeric($raw)) {
+                    continue;
+                }
+                $value = (float)$raw;
+                if ($value > 0) {
+                    // hwmon power limits are typically in microwatts.
+                    $limits[] = $value / 1000000.0;
+                }
+            }
+        }
+
+        if (empty($limits)) {
+            return null;
+        }
+
+        return round(max($limits), 1);
+    }
+
+    /**
+     * Read Intel temperature limit from hwmon and return max in Celsius.
+     */
+    private function getIntelTempLimitC(string $pciId): ?float
+    {
+        $candidates = [
+            "temp2_crit",
+            "temp1_crit",
+            "temp2_max",
+            "temp1_max"
+        ];
+
+        foreach ($candidates as $entry) {
+            $paths = glob("/sys/bus/pci/devices/$pciId/hwmon/*/$entry");
+            if (!$paths) {
+                continue;
+            }
+            foreach ($paths as $path) {
+                if (!is_file($path)) {
+                    continue;
+                }
+                $raw = trim((string)@file_get_contents($path));
+                if ($raw === '' || !is_numeric($raw)) {
+                    continue;
+                }
+                $value = (float)$raw;
+                if ($value > 0) {
+                    return round($value / 1000.0, 1);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function getIntelFanCacheFile(string $pciId): string
+    {
+        $safePci = str_replace(':', '_', $pciId);
+        return "/tmp/gpustat_fan_cache_{$safePci}.json";
+    }
+
+    private function getCachedIntelFanRpm(string $pciId, int $ttlSeconds = 30): ?float
+    {
+        $cacheFile = $this->getIntelFanCacheFile($pciId);
+        if (!is_file($cacheFile)) {
+            return null;
+        }
+
+        $decoded = json_decode((string)@file_get_contents($cacheFile), true);
+        if (!is_array($decoded) || !isset($decoded['rpm'], $decoded['ts'])) {
+            return null;
+        }
+
+        $rpm = (float)$decoded['rpm'];
+        $ts = (int)$decoded['ts'];
+        if ($rpm <= 0 || (time() - $ts) > $ttlSeconds) {
+            return null;
+        }
+
+        return $rpm;
+    }
+
+    private function setCachedIntelFanRpm(string $pciId, float $rpm): void
+    {
+        if ($rpm <= 0) {
+            return;
+        }
+
+        $cacheFile = $this->getIntelFanCacheFile($pciId);
+        @file_put_contents($cacheFile, json_encode([
+            'rpm' => $rpm,
+            'ts' => time()
+        ]));
+    }
+
+    private function getIntelPowerReadingCacheFile(string $pciId): string
+    {
+        $safePci = str_replace(':', '_', $pciId);
+        return "/tmp/gpustat_power_reading_cache_{$safePci}.json";
+    }
+
+    private function getCachedIntelPowerReading(string $pciId, int $ttlSeconds = 20): ?float
+    {
+        $cacheFile = $this->getIntelPowerReadingCacheFile($pciId);
+        if (!is_file($cacheFile)) {
+            return null;
+        }
+
+        $decoded = json_decode((string)@file_get_contents($cacheFile), true);
+        if (!is_array($decoded) || !isset($decoded['power'], $decoded['ts'])) {
+            return null;
+        }
+
+        $power = (float)$decoded['power'];
+        $ts = (int)$decoded['ts'];
+        if ($power <= 0 || (time() - $ts) > $ttlSeconds) {
+            return null;
+        }
+
+        return $power;
+    }
+
+    private function setCachedIntelPowerReading(string $pciId, float $power): void
+    {
+        if ($power <= 0) {
+            return;
+        }
+
+        $cacheFile = $this->getIntelPowerReadingCacheFile($pciId);
+        @file_put_contents($cacheFile, json_encode([
+            'power' => $power,
+            'ts' => time()
+        ]));
+    }
+
+    private function getQmassaSampleCacheFile(string $pciId): string
+    {
+        $safePci = str_replace(':', '_', $pciId);
+        return "/tmp/gpustat_qmassa_sample_cache_{$safePci}.json";
+    }
+
+    private function getCachedQmassaSample(string $pciId, int $ttlSeconds = 20): ?array
+    {
+        $cacheFile = $this->getQmassaSampleCacheFile($pciId);
+        if (!is_file($cacheFile)) {
+            return null;
+        }
+
+        $decoded = json_decode((string)@file_get_contents($cacheFile), true);
+        if (!is_array($decoded) || !isset($decoded['sample'], $decoded['ts']) || !is_array($decoded['sample'])) {
+            return null;
+        }
+
+        $ts = (int)$decoded['ts'];
+        if ((time() - $ts) > $ttlSeconds) {
+            return null;
+        }
+
+        return $decoded['sample'];
+    }
+
+    private function setCachedQmassaSample(string $pciId, array $sample): void
+    {
+        $cacheFile = $this->getQmassaSampleCacheFile($pciId);
+        @file_put_contents($cacheFile, json_encode([
+            'ts' => time(),
+            'sample' => $sample
+        ]));
+    }
+
+    private function isLikelyTransientZeroSample(array $sample): bool
+    {
+        $gpuPower = isset($sample['power']['GPU']) && is_numeric($sample['power']['GPU']) ? (float)$sample['power']['GPU'] : 0.0;
+        $pkgPower = isset($sample['power']['Package']) && is_numeric($sample['power']['Package']) ? (float)$sample['power']['Package'] : 0.0;
+        $temp = isset($sample['temperature']) && is_numeric($sample['temperature']) ? (float)$sample['temperature'] : 0.0;
+        $freq = isset($sample['frequency']['actual']) && is_numeric($sample['frequency']['actual']) ? (float)$sample['frequency']['actual'] : 0.0;
+        $memUtil = isset($sample['memutil']) && is_numeric($sample['memutil']) ? (float)$sample['memutil'] : 0.0;
+
+        $engineBusy = 0.0;
+        if (isset($sample['engines']) && is_array($sample['engines'])) {
+            foreach ($sample['engines'] as $engine) {
+                if (is_array($engine) && isset($engine['busy']) && is_numeric($engine['busy'])) {
+                    $engineBusy += (float)$engine['busy'];
+                }
+            }
+        }
+
+        return $gpuPower <= 0.0 && $pkgPower <= 0.0 && $temp <= 0.0 && $freq <= 0.0 && $memUtil <= 0.0 && $engineBusy <= 0.0;
+    }
+
+    private function getFdinfoCacheFile(string $pciId): string
+    {
+        $safePci = str_replace(':', '_', $pciId);
+        return "/tmp/gpustat_fdinfo_cache_{$safePci}.json";
+    }
+
+    private function parseFdinfoLine(string $line): ?array
+    {
+        $parts = explode(':', $line, 2);
+        if (count($parts) !== 2) {
+            return null;
+        }
+
+        $key = trim($parts[0]);
+        $value = trim($parts[1]);
+        if ($key === '') {
+            return null;
+        }
+
+        return [$key, $value];
+    }
+
+    private function parseFdinfoUint(string $value): ?int
+    {
+        if (preg_match('/^[0-9]+$/', trim($value))) {
+            return (int)$value;
+        }
+        return null;
+    }
+
+    private function parseFdinfoKiB(string $value): int
+    {
+        if (preg_match('/^([0-9]+)\s*(kB|KiB)$/i', trim($value), $m)) {
+            return (int)$m[1] * 1024;
+        }
+        return 0;
+    }
+
+    /**
+     * Read XE fdinfo counters and compute utilization from cycle deltas (nvtop style).
+     *
+     * @return array{engines: array, clients: array}
+     */
+    private function getXeFdinfoUsage(string $pciId): array
+    {
+        $engineMap = [
+            'rcs' => 'Render/3D',
+            'bcs' => 'Blitter',
+            'vcs' => 'Video',
+            'vecs' => 'VideoEnhance',
+            'ccs' => 'Compute'
+        ];
+
+        $current = [];
+        $clients = [];
+
+        $procDirs = glob('/proc/[0-9]*', GLOB_NOSORT) ?: [];
+        foreach ($procDirs as $procDir) {
+            $pid = (int)basename($procDir);
+            if ($pid <= 0) {
+                continue;
+            }
+
+            $commPath = "$procDir/comm";
+            $processName = is_file($commPath) ? trim((string)@file_get_contents($commPath)) : 'unknown';
+            if ($this->isExcludedClientProcess($processName)) {
+                continue;
+            }
+
+            $fdInfos = glob("$procDir/fdinfo/[0-9]*", GLOB_NOSORT) ?: [];
+            foreach ($fdInfos as $fdInfoPath) {
+                $lines = @file($fdInfoPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+                if (!$lines) {
+                    continue;
+                }
+
+                $kv = [];
+                foreach ($lines as $line) {
+                    $parsed = $this->parseFdinfoLine($line);
+                    if ($parsed === null) {
+                        continue;
+                    }
+                    [$k, $v] = $parsed;
+                    $kv[$k] = $v;
+                }
+
+                if (!isset($kv['drm-pdev']) || strcasecmp($kv['drm-pdev'], $pciId) !== 0) {
+                    continue;
+                }
+
+                $clientId = $kv['drm-client-id'] ?? basename($fdInfoPath);
+                $clientKey = $pid . ':' . $clientId;
+                if (isset($current[$clientKey])) {
+                    continue;
+                }
+
+                $entry = [
+                    'pid' => $pid,
+                    'name' => $processName,
+                    'memory' => 0,
+                    'engines' => []
+                ];
+
+                // xe fdinfo memory key
+                if (isset($kv['drm-total-vram0'])) {
+                    $entry['memory'] = $this->parseFdinfoKiB($kv['drm-total-vram0']);
+                }
+
+                foreach ($engineMap as $suffix => $displayName) {
+                    $cyclesKey = "drm-cycles-$suffix";
+                    $totalCyclesKey = "drm-total-cycles-$suffix";
+                    $cycles = isset($kv[$cyclesKey]) ? $this->parseFdinfoUint($kv[$cyclesKey]) : null;
+                    $totalCycles = isset($kv[$totalCyclesKey]) ? $this->parseFdinfoUint($kv[$totalCyclesKey]) : null;
+
+                    if ($cycles !== null && $totalCycles !== null) {
+                        $entry['engines'][$displayName] = [
+                            'cycles' => $cycles,
+                            'total' => $totalCycles
+                        ];
+                    }
+                }
+
+                $current[$clientKey] = $entry;
+            }
+        }
+
+        $cacheFile = $this->getFdinfoCacheFile($pciId);
+        $previous = [];
+        if (is_file($cacheFile)) {
+            $decoded = json_decode((string)@file_get_contents($cacheFile), true);
+            if (is_array($decoded) && isset($decoded['clients']) && is_array($decoded['clients'])) {
+                $previous = $decoded['clients'];
+            }
+        }
+
+        $engineBusy = [
+            'Render/3D' => 0.0,
+            'Blitter' => 0.0,
+            'Video' => 0.0,
+            'VideoEnhance' => 0.0,
+            'Compute' => 0.0
+        ];
+
+        foreach ($current as $clientKey => $entry) {
+            $clientEngines = [];
+
+            foreach ($entry['engines'] as $engineName => $counters) {
+                $busy = 0.0;
+
+                if (isset($previous[$clientKey]['engines'][$engineName])) {
+                    $prevCounters = $previous[$clientKey]['engines'][$engineName];
+                    $deltaCycles = (int)$counters['cycles'] - (int)($prevCounters['cycles'] ?? 0);
+                    $deltaTotal = (int)$counters['total'] - (int)($prevCounters['total'] ?? 0);
+
+                    if ($deltaTotal > 0 && $deltaCycles >= 0) {
+                        $busy = ($deltaCycles * 100.0) / $deltaTotal;
+                        if ($busy < 0) $busy = 0.0;
+                        if ($busy > 100) $busy = 100.0;
+                    }
+                }
+
+                $engineBusy[$engineName] += $busy;
+                $clientEngines[$engineName] = ['busy' => $busy];
+            }
+
+            $clients[] = [
+                'name' => $entry['name'],
+                'pid' => $entry['pid'],
+                'memory' => [
+                    'system' => [
+                        'total' => $entry['memory']
+                    ]
+                ],
+                'engine-classes' => $clientEngines
+            ];
+        }
+
+        // Save latest counters for next refresh interval.
+        @file_put_contents($cacheFile, json_encode([
+            'timestamp' => microtime(true),
+            'clients' => $current
+        ]));
+
+        return [
+            'engines' => $engineBusy,
+            'clients' => $clients
+        ];
     }
 
     /**
@@ -102,7 +522,8 @@ class Intel extends Main
                     $command = self::CMD_UTILITY;
                     $this->runCommand($command, self::STATISTICS_PARAM. $this->settings['GPUID'].'"', false); 
                 } else {
-                    $this->stdout = $this->buildXEJSON($this->settings['GPUID']);
+                    // Try qmassa first, will fallback to sysfs if qmassa not available
+                    $this->stdout = $this->buildXEJSONQmassa($this->settings['GPUID']);
                     $this->cmdexists = true;
                 }
                 file_put_contents("/tmp/gpurawdata".$this->settings['GPUID'],json_encode($this->stdout));
@@ -145,21 +566,32 @@ class Intel extends Main
      */
     private function parseStatistics()
     {
-        // JSON output from intel_gpu_top with multiple array indexes isn't properly formatted
-        $stdout= str_replace(['[',']'],['',''],$this->stdout);
-        #$stdout = $this->stdout;
-        $stdout = str_replace('}{', '},{', str_replace(["\n","\t"], '', $stdout));
-
+        // Try to decode as proper JSON array first (for qmassa/buildXEJSON output)
         try {
-            // Split the string into two JSON objects
-            $splitJson = preg_split('/\}\s*,\s*\{/m', $stdout);
-            // Format the split parts correctly for JSON decoding
-            $splitJson[0] .= '}';
-            $splitJson[1] = '{' . $splitJson[1];
-            $data = json_decode($splitJson[1], true, 512, JSON_THROW_ON_ERROR);
+            $decoded = json_decode($this->stdout, true, 512, JSON_THROW_ON_ERROR);
+            if (is_array($decoded) && count($decoded) >= 2) {
+                // Valid JSON array with at least 2 elements, use second element
+                $data = $decoded[1];
+            } else {
+                throw new JsonException("Not a valid array with 2+ elements");
+            }
         } catch (JsonException $e) {
-            $data = [];
-            $this->pageData['error'][] = Error::get(Error::VENDOR_DATA_BAD_PARSE, $e->getMessage());
+            // Fallback to old intel_gpu_top string manipulation method
+            // JSON output from intel_gpu_top with multiple array indexes isn't properly formatted
+            $stdout= str_replace(['[',']'],['',''],$this->stdout);
+            $stdout = str_replace('}{', '},{', str_replace(["\n","\t"], '', $stdout));
+
+            try {
+                // Split the string into two JSON objects
+                $splitJson = preg_split('/\}\s*,\s*\{/m', $stdout);
+                // Format the split parts correctly for JSON decoding
+                $splitJson[0] .= '}';
+                $splitJson[1] = '{' . $splitJson[1];
+                $data = json_decode($splitJson[1], true, 512, JSON_THROW_ON_ERROR);
+            } catch (JsonException $e2) {
+                $data = [];
+                $this->pageData['error'][] = Error::get(Error::VENDOR_DATA_BAD_PARSE, $e2->getMessage());
+            }
         }
 
         // Need to make sure we have at least two array indexes to take the second one
@@ -243,21 +675,73 @@ class Intel extends Main
                     if (isset($data['power']['unit'])) $powerunit = $data['power']['unit'] ; else $powerunit = "" ;
                     $this->pageData['power'] = max($powerGPU,$powerPackage) . $powerunit ;               
                 }
+
+                // Avoid transient 0W flicker by reusing last good reading briefly.
+                if (preg_match('/([0-9]+(?:\.[0-9]+)?)/', (string)$this->pageData['power'], $powerMatches)) {
+                    $powerValue = (float)$powerMatches[1];
+                    if ($powerValue > 0) {
+                        $this->setCachedIntelPowerReading($this->settings['GPUID'], $powerValue);
+                    } else {
+                        $cachedPower = $this->getCachedIntelPowerReading($this->settings['GPUID']);
+                        if ($cachedPower !== null) {
+                            $powerUnitOut = isset($powerunit) && $powerunit !== '' ? $powerunit : 'W';
+                            $this->pageData['power'] = $this->roundFloat($cachedPower, 1) . $powerUnitOut;
+                        }
+                    }
+                }
+
+                $powerMax = null;
+                if (isset($data['power']['max']) && is_numeric($data['power']['max'])) {
+                    $powerMax = (float)$data['power']['max'];
+                } else {
+                    $powerMax = $this->getIntelPowerLimitWatts($this->settings['GPUID']);
+                }
+                if ($powerMax !== null && $powerMax > 0) {
+                    $this->pageData['powermax'] = $powerMax;
+                    if (preg_match('/([0-9]+(?:\.[0-9]+)?)/', (string)$this->pageData['power'], $matches)) {
+                        $powerCurrent = (float)$matches[1];
+                        $powerUtil = ($powerCurrent / $powerMax) * 100;
+                        $powerUtil = max(0.0, min(100.0, $powerUtil));
+                        $this->pageData['powerutil'] = $this->roundFloat($powerUtil, 1) . "%";
+                    }
+                }
             }
             if ($this->settings['DISPFAN']) {
                 $path = glob("/sys/bus/pci/devices/{$this->settings['GPUID']}/hwmon/*/fan1_input");
                 if (isset($path[0]) && is_file($path[0])) {
-                    $this->pageData['fan'] = $this->readSysfsData($path[0]);
+                    $fanReading = $this->readSysfsData($path[0]);
+                    if ($fanReading > 0) {
+                        $this->setCachedIntelFanRpm($this->settings['GPUID'], $fanReading);
+                        $this->pageData['fan'] = (int)$this->roundFloat($fanReading);
+                    } else {
+                        $cachedFan = $this->getCachedIntelFanRpm($this->settings['GPUID']);
+                        $this->pageData['fan'] = $cachedFan !== null ? (int)$this->roundFloat($cachedFan) : 'N/A';
+                    }
                     $this->pageData['fanmax'] = 4000;
                 }
             }
             if ($this->settings['DISPTEMP']) {
-                $path = glob("/sys/bus/pci/devices/{$this->settings['GPUID']}/hwmon/*/temp1_input");
-                if (isset($path[0]) && is_file($path[0])) {
-                    $this->pageData['temp'] = $this->readSysfsData($path[0]);
-                    $this->pageData['temp'] = $this->pageData['temp'] / 1000 . "C";
-                    if ($this->settings['TEMPFORMAT'] == 'F') {
-                        foreach (['temp'] as $key) {
+                if (isset($data['temperature']) && is_numeric($data['temperature'])) {
+                    $this->pageData['temp'] = $this->roundFloat($data['temperature'], 1) . "C";
+                } else {
+                    $path = glob("/sys/bus/pci/devices/{$this->settings['GPUID']}/hwmon/*/temp2_input");
+                    if (!isset($path[0]) || !is_file($path[0])) {
+                        $path = glob("/sys/bus/pci/devices/{$this->settings['GPUID']}/hwmon/*/temp1_input");
+                    }
+                    if (isset($path[0]) && is_file($path[0])) {
+                        $this->pageData['temp'] = $this->readSysfsData($path[0]);
+                        $this->pageData['temp'] = $this->pageData['temp'] / 1000 . "C";
+                    }
+                }
+
+                $tempLimit = $this->getIntelTempLimitC($this->settings['GPUID']);
+                if ($tempLimit !== null) {
+                    $this->pageData['tempmax'] = $tempLimit . "C";
+                }
+
+                if ($this->settings['TEMPFORMAT'] == 'F') {
+                    foreach (['temp', 'tempmax'] as $key) {
+                        if (isset($this->pageData[$key]) && $this->pageData[$key] !== 'N/A') {
                             $this->pageData[$key] = $this->convertCelsius((int) $this->stripText('C', $this->pageData[$key])) . 'F';
                         }
                     }
@@ -266,8 +750,29 @@ class Intel extends Main
             // According to the sparse documentation, rc6 is a percentage of how little the GPU is requesting power
             if ($this->settings['DISPPWRSTATE']) {
                 if (isset($data['rc6']['value'])) {
-                    $this->pageData['powerutil'] = $this->roundFloat(100 - $data['rc6']['value'], 2) . "%";
-                    if ($powerGPU == 0 && $this->pageData['powerutil'] != 0) $this->pageData['powerutil'] = 0;
+                    if ((!$this->settings['DISPPWRDRAW']) && (!isset($this->pageData['powerutil']) || $this->pageData['powerutil'] === 'N/A')) {
+                        $this->pageData['powerutil'] = $this->roundFloat(100 - $data['rc6']['value'], 2) . "%";
+                    }
+                    if (isset($powerGPU) && $powerGPU == 0 && $this->pageData['powerutil'] != 0) $this->pageData['powerutil'] = "0%";
+                }
+            }
+
+            if ($this->settings['DISPMEMUTIL']) {
+                $memTotal = (isset($data['memtotal']) && is_numeric($data['memtotal'])) ? (float)$data['memtotal'] : null;
+                $memUsed = null;
+                if (isset($data['memusedmb']) && is_numeric($data['memusedmb'])) {
+                    $memUsed = (float)$data['memusedmb'];
+                } elseif (isset($data['memused']) && is_numeric($data['memused'])) {
+                    $memUsed = (float)$data['memused'];
+                }
+
+                if ($memTotal !== null && $memUsed !== null && $memTotal > 0) {
+                    $memUtilPercent = $this->roundFloat(($memUsed / $memTotal) * 100, 1) . "%";
+                    $this->pageData['memutil'] = $memUtilPercent;
+                    // Keep legacy UI bindings (gpu-memused*) showing percent instead of MiB.
+                    $this->pageData['memused'] = $memUtilPercent;
+                    $this->pageData['memusedmb'] = $this->roundFloat($memUsed, 1);
+                    $this->pageData['memtotal'] = $this->roundFloat($memTotal, 1);
                 }
             }
             if ($this->settings['DISPCLOCKS']) {
@@ -359,7 +864,43 @@ class Intel extends Main
               return null; // Return null if no matching PCI ID found
           }
       
+          /**
+           * Find DRI card number from PCI ID
+           * Maps PCI ID like "0000:04:00.0" to card number like "0" or "1"
+           * 
+           * @param string $pciId PCI ID (e.g., "0000:04:00.0")
+           * @return int|null Card number or null if not found
+           */
+          private function getDRICardNumber(string $pciId): ?int
+          {
+              $basePath = '/sys/class/drm';
+              if (!is_dir($basePath)) {
+                  return null;
+              }
+              
+              $cards = glob("$basePath/card*");
+              foreach ($cards as $cardPath) {
+                  // Read the device symlink to get actual PCI path
+                  $deviceLink = "$cardPath/device";
+                  if (is_link($deviceLink)) {
+                      $devicePath = readlink($deviceLink);
+                      // Extract PCI ID from path like "../../../0000:04:00.0"
+                      if (preg_match('/([0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-9])$/i', $devicePath, $matches)) {
+                          if (strcasecmp($matches[1], $pciId) === 0) {
+                              // Extract card number from path
+                              if (preg_match('/card(\d+)$/', basename($cardPath), $cardMatches)) {
+                                  return (int)$cardMatches[1];
+                              }
+                          }
+                      }
+                  }
+              }
+              
+              return null;
+          }
+      
     // Function to generate the JSON from sysfs data based on PCI ID
+    // This is a fallback method for XE driver when qmassa is not available
     protected function buildXEJSON(string $pciId): string
     {
       
@@ -392,6 +933,7 @@ class Intel extends Main
         $rc6Value = 100; // Convert to percentage if needed
         $powerGpu = null; // Convert µW to W
         $powerPackage = null; // Approximate package power
+        $clients = null; // Initialize clients array
 
         $clientsPath = "/sys/kernel/debug/dri/$pciId/clients";
 
@@ -407,6 +949,9 @@ class Intel extends Main
                     $columns = preg_split('/\s+/', trim($line));
                     if (count($columns) >= 6) {
                         list($command, $tgid, $dev, $master, $a, $uid) = $columns;
+                        if ($this->isExcludedClientProcess($command)) {
+                            continue;
+                        }
                         $totalmem['system']['total']= 0;
                         $clients[$tgid] = [
                             "name" => $command,
@@ -479,6 +1024,393 @@ class Intel extends Main
         $return = json_encode($returnjson, JSON_PRETTY_PRINT);
         file_put_contents("/tmp/inteljson",$return);
         return $return;
+    }
+
+    /**
+     * Function to generate JSON from qmassa for XE driver
+     * Uses qmassa (https://github.com/ulissesf/qmassa) for comprehensive XE GPU statistics
+     * 
+     * qmassa outputs JSONL format with multiple samples
+     * Each sample has 3 lines: version, config, data
+     * With -n 2 we get 6 lines total, using the last sample for activity data
+     * 
+     * @param string $pciId PCI ID of the GPU (e.g., "0000:00:02.0")
+     * @return string JSON formatted string compatible with intel_gpu_top output
+     */
+    protected function buildXEJSONQmassa(string $pciId): string
+    {
+        // Check if qmassa is available
+        $qmassaPath = trim(shell_exec('which ' . self::QMASSA_CMD . ' 2>/dev/null'));
+        
+        // Debug: log qmassa path
+        error_log("gpustat: qmassa path lookup result: " . ($qmassaPath ?: 'NOT FOUND'));
+        
+        if (empty($qmassaPath)) {
+            // Fallback to sysfs method if qmassa not found
+            error_log("gpustat: qmassa binary not found in PATH, falling back to sysfs");
+            return $this->buildXEJSON($pciId);
+        }
+        
+        // Temporary file for qmassa JSON output (replace colons to avoid filesystem issues)
+        $safeFileName = str_replace(':', '_', $pciId);
+        $tempJsonFile = "/tmp/gpustat_qmassa_{$safeFileName}.json";
+        
+        // Build qmassa command
+        // -x: no TUI (headless mode)
+        // -w: show all sensors
+        // -a: show all clients (not just active ones)
+        // -t: output JSON to file
+        // -d: specific device by PCI ID
+        // -n 2: TWO iterations to get activity data (like intel_gpu_top)
+        // -m 1000: 1000ms interval between samples
+        $command = sprintf(
+            'timeout %d %s -wxa -m 1000 -n 2 -t %s -d %s 2>&1',
+            self::QMASSA_TIMEOUT,
+            $qmassaPath, // Use full path
+            escapeshellarg($tempJsonFile),
+            escapeshellarg($pciId)
+        );
+        
+        // Debug: log the command being executed
+        error_log("gpustat: Executing qmassa command: $command");
+        
+        // Execute qmassa
+        exec($command, $output, $returnCode);
+        
+        // Debug: log execution results
+        error_log("gpustat: qmassa return code: $returnCode, output lines: " . count($output));
+        if ($returnCode !== 0) {
+            error_log("gpustat: qmassa stderr: " . implode("\n", $output));
+        }
+        
+        // Check if qmassa executed successfully
+        if ($returnCode !== 0 || !file_exists($tempJsonFile)) {
+            // Log error and fallback
+            error_log("gpustat: qmassa failed for $pciId (code: $returnCode), file exists: " . (file_exists($tempJsonFile) ? 'yes' : 'no') . ", falling back to sysfs");
+            @unlink($tempJsonFile);
+            return $this->buildXEJSON($pciId);
+        }
+        
+        // Read qmassa JSONL output
+        // With -n 2: 6 lines total (3 per sample: version, config, data)
+        // We want the LAST sample (line 6) which has accumulated activity data
+        $qmassaLines = file($tempJsonFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        // Keep raw qmassa output for debugging (not deleting temp file)
+        
+        // Debug: log line count
+        error_log("gpustat: qmassa output has " . count($qmassaLines) . " lines");
+        
+        if (empty($qmassaLines) || count($qmassaLines) < 3) {
+            error_log("gpustat: qmassa returned insufficient output for $pciId (expected at least 3 lines, got " . count($qmassaLines) . ")");
+            return $this->buildXEJSON($pciId);
+        }
+        
+        try {
+            // Parse the LAST line (most recent sample with activity data)
+            // With -n 2: lines are [0]=v1, [1]=cfg1, [2]=data1, [3]=v2, [4]=cfg2, [5]=data2
+            // We want data2 (last line)
+            $lastLine = $qmassaLines[count($qmassaLines) - 1];
+            $qmassaData = json_decode($lastLine, true, 512, JSON_THROW_ON_ERROR);
+            
+            // Extract device data from devs_state array
+            if (!isset($qmassaData['devs_state']) || empty($qmassaData['devs_state'])) {
+                throw new JsonException("No devs_state in qmassa output");
+            }
+            
+            // Find our device in the array
+            $deviceData = null;
+            foreach ($qmassaData['devs_state'] as $device) {
+                if (isset($device['pci_dev']) && $device['pci_dev'] === $pciId) {
+                    $deviceData = $device;
+                    break;
+                }
+            }
+            
+            if (!$deviceData) {
+                throw new JsonException("Device $pciId not found in qmassa devs_state");
+            }
+            
+            // Debug: log device data structure
+            $clientCount = isset($deviceData['clis_stats']) ? count($deviceData['clis_stats']) : 0;
+            error_log("gpustat: Device $pciId has $clientCount clients in qmassa output");
+            
+            // Transform qmassa output to intel_gpu_top compatible format
+            $jsonOutput = $this->transformQmassaToIntelFormat($deviceData, $pciId);
+
+            // qmassa occasionally yields transient all-zero samples on refresh.
+            // Reuse the last good sample briefly to avoid flashing zeros.
+            if ($this->isLikelyTransientZeroSample($jsonOutput)) {
+                $cachedSample = $this->getCachedQmassaSample($pciId);
+                if ($cachedSample !== null) {
+                    $jsonOutput = $cachedSample;
+                    error_log("gpustat: Using cached qmassa sample for $pciId due to transient zero sample");
+                }
+            } else {
+                $this->setCachedQmassaSample($pciId, $jsonOutput);
+            }
+            
+            // intel_gpu_top returns array with two samples, duplicate for compatibility
+            $returnjson[] = $jsonOutput;
+            $returnjson[] = $jsonOutput;
+            
+            $return = json_encode($returnjson, JSON_PRETTY_PRINT);
+            $safeFileName = str_replace(':', '_', $pciId);
+            file_put_contents("/tmp/inteljson_qmassa_{$safeFileName}", $return);
+            
+            return $return;
+            
+        } catch (JsonException $e) {
+            error_log("gpustat: Failed to parse qmassa JSON for $pciId: " . $e->getMessage());
+            return $this->buildXEJSON($pciId);
+        }
+    }
+    
+    /**
+     * Transform qmassa JSON format to intel_gpu_top compatible format
+     * 
+     * qmassa structure: devs_state[].dev_stats contains metrics
+     * - freqs: array of arrays [[{gt0}, {gt1}]]
+     * - power: array [{gpu_cur_power, pkg_cur_power}]
+     * - temps: array of arrays [[{name, temp}]]
+     * - fans: array of arrays [[{name, speed}]]
+     * - eng_usage: object with engine names as keys
+     * 
+     * @param array $qmassaData Parsed qmassa device data from devs_state
+     * @param string $pciId PCI ID for reference
+     * @return array Formatted data compatible with parseStatistics()
+     */
+    private function transformQmassaToIntelFormat(array $qmassaData, string $pciId): array
+    {
+        $output = [
+            "period" => [
+                "duration" => 1000.0,
+                "unit" => "ms"
+            ],
+            "frequency" => [
+                "requested" => null,
+                "actual" => null,
+                "unit" => "MHz"
+            ],
+            "interrupts" => [
+                "count" => null,
+                "unit" => "irq/s"
+            ],
+            "rc6" => [
+                "value" => 0.0,
+                "unit" => "%"
+            ],
+            "power" => [
+                "GPU" => null,
+                "Package" => null,
+                "unit" => "W"
+            ],
+            "engines" => [
+                "Render/3D" => ["busy" => 0.0, "sema" => 0.0, "wait" => 0.0, "unit" => "%"],
+                "Blitter" => ["busy" => 0.0, "sema" => 0.0, "wait" => 0.0, "unit" => "%"],
+                "Video" => ["busy" => 0.0, "sema" => 0.0, "wait" => 0.0, "unit" => "%"],
+                "VideoEnhance" => ["busy" => 0.0, "sema" => 0.0, "wait" => 0.0, "unit" => "%"]
+            ],
+            "clients" => [],
+            "imc-bandwidth" => [
+                "reads" => 0.0,
+                "writes" => 0.0,
+                "unit" => "MB/s"
+            ]
+        ];
+        
+        // Extract dev_stats where the actual metrics are
+        $devStats = $qmassaData['dev_stats'] ?? [];
+        
+        // Map frequency data - freqs is array of samples: [[{gt0}, {gt1}], [{gt0}, {gt1}]]
+        // Use LAST sample which has the most recent data
+        if (isset($devStats['freqs']) && is_array($devStats['freqs']) && !empty($devStats['freqs'])) {
+            $lastFreqSample = $devStats['freqs'][count($devStats['freqs']) - 1];
+            if (isset($lastFreqSample[0])) {
+                // Use first GT (gt0) frequency data
+                $freqData = $lastFreqSample[0];
+                $output['frequency']['requested'] = $freqData['cur_freq'] ?? null;
+                $output['frequency']['actual'] = $freqData['act_freq'] ?? null;
+            }
+        }
+        
+        // Map power data - power is array of samples: [{sample1}, {sample2}]
+        // Use LAST sample which has accumulated activity data
+        if (isset($devStats['power']) && is_array($devStats['power']) && !empty($devStats['power'])) {
+            $lastPowerSample = $devStats['power'][count($devStats['power']) - 1];
+            $output['power']['GPU'] = $lastPowerSample['gpu_cur_power'] ?? null;
+            $output['power']['Package'] = $lastPowerSample['pkg_cur_power'] ?? null;
+        }
+        
+        // Map temperature data - temps is array of samples: [[[{pkg}, {vram}]], [[{pkg}, {vram}]]]
+        // Use LAST sample which has the most recent temperature
+        if (isset($devStats['temps']) && is_array($devStats['temps']) && !empty($devStats['temps'])) {
+            $lastTempSample = $devStats['temps'][count($devStats['temps']) - 1];
+            if (isset($lastTempSample[0])) {
+                // Find package temperature
+                foreach ($lastTempSample[0] as $tempSensor) {
+                    if (isset($tempSensor['name']) && $tempSensor['name'] === 'pkg' && isset($tempSensor['temp'])) {
+                        $output['temperature'] = $tempSensor['temp'];
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Map memory info (bytes) to MiB for dashboard usage bar.
+        if (isset($devStats['mem_info']) && is_array($devStats['mem_info']) && !empty($devStats['mem_info'])) {
+            $lastMemSample = $devStats['mem_info'][count($devStats['mem_info']) - 1];
+            $vramTotal = isset($lastMemSample['vram_total']) ? (float)$lastMemSample['vram_total'] : 0.0;
+            $vramUsed = isset($lastMemSample['vram_used']) ? (float)$lastMemSample['vram_used'] : 0.0;
+            if ($vramTotal > 0) {
+                $output['memtotal'] = $vramTotal / (1024 * 1024);
+                $output['memused'] = $vramUsed / (1024 * 1024);
+                $output['memusedmb'] = $output['memused'];
+                $output['memutil'] = ($vramUsed / $vramTotal) * 100.0;
+            }
+        }
+        
+        // Map engine usage - eng_usage is object with engine names as keys
+        if (isset($devStats['eng_usage']) && is_array($devStats['eng_usage'])) {
+            foreach ($devStats['eng_usage'] as $engineName => $engineData) {
+                $busy = is_array($engineData) ? ($engineData['busy'] ?? 0.0) : 0.0;
+                
+                // Map qmassa engine names to intel_gpu_top names
+                $engineLower = strtolower($engineName);
+                if (strpos($engineLower, 'render') !== false || strpos($engineLower, '3d') !== false || strpos($engineLower, 'rcs') !== false) {
+                    $output['engines']['Render/3D']['busy'] = $busy;
+                } elseif (strpos($engineLower, 'blitter') !== false || strpos($engineLower, 'blt') !== false || strpos($engineLower, 'bcs') !== false) {
+                    $output['engines']['Blitter']['busy'] = $busy;
+                } elseif (strpos($engineLower, 'video') !== false && strpos($engineLower, 'enhance') === false && strpos($engineLower, 'vecs') === false) {
+                    $output['engines']['Video']['busy'] = $busy;
+                } elseif (strpos($engineLower, 'videoenhance') !== false || strpos($engineLower, 'vebox') !== false || strpos($engineLower, 'vecs') !== false) {
+                    $output['engines']['VideoEnhance']['busy'] = $busy;
+                }
+            }
+        }
+
+        $hasQmassaEngineUsage =
+            $output['engines']['Render/3D']['busy'] > 0 ||
+            $output['engines']['Blitter']['busy'] > 0 ||
+            $output['engines']['Video']['busy'] > 0 ||
+            $output['engines']['VideoEnhance']['busy'] > 0;
+
+        $fdinfoUsage = null;
+        if (!$hasQmassaEngineUsage) {
+            $fdinfoUsage = $this->getXeFdinfoUsage($pciId);
+            foreach ($fdinfoUsage['engines'] as $engineName => $busy) {
+                if (isset($output['engines'][$engineName])) {
+                    $output['engines'][$engineName]['busy'] = $busy;
+                }
+            }
+            if (isset($fdinfoUsage['engines']['Compute'])) {
+                // Keep compatibility with the plugin's explicit Compute row.
+                $output['engines']['Compute'] = [
+                    'busy' => $fdinfoUsage['engines']['Compute'],
+                    'sema' => 0.0,
+                    'wait' => 0.0,
+                    'unit' => '%'
+                ];
+            }
+        }
+        
+        // Map DRM clients from clis_stats
+        if (isset($qmassaData['clis_stats']) && is_array($qmassaData['clis_stats'])) {
+            // Debug: log client count
+            error_log("gpustat: Found " . count($qmassaData['clis_stats']) . " DRM clients for $pciId");
+            
+            foreach ($qmassaData['clis_stats'] as $client) {
+                $clientName = $client['comm'] ?? ($client['command'] ?? 'unknown');
+                if ($this->isExcludedClientProcess($clientName)) {
+                    continue;
+                }
+
+                $clientEntry = [
+                    "name" => $clientName,
+                    "pid" => $client['pid'] ?? 0,
+                    "memory" => [
+                        "system" => [
+                            "total" => ($client['smem_rss'] ?? 0) // Already in bytes
+                        ]
+                    ],
+                    "engine-classes" => []
+                ];
+                
+                // Debug: log client details
+                error_log("gpustat: Client {$clientEntry['name']} (PID {$clientEntry['pid']})");
+                
+                // Map client engine usage
+                if (isset($client['eng_usage']) && is_array($client['eng_usage'])) {
+                    foreach ($client['eng_usage'] as $engineName => $engineData) {
+                        $busy = is_array($engineData) ? ($engineData['busy'] ?? 0.0) : 0.0;
+                        
+                        $engineLower = strtolower($engineName);
+                        if (strpos($engineLower, 'render') !== false || strpos($engineLower, '3d') !== false || strpos($engineLower, 'rcs') !== false) {
+                            $clientEntry['engine-classes']['Render/3D'] = ['busy' => $busy];
+                        } elseif (strpos($engineLower, 'blitter') !== false || strpos($engineLower, 'bcs') !== false) {
+                            $clientEntry['engine-classes']['Blitter'] = ['busy' => $busy];
+                        } elseif (strpos($engineLower, 'video') !== false && strpos($engineLower, 'enhance') === false && strpos($engineLower, 'vecs') === false) {
+                            $clientEntry['engine-classes']['Video'] = ['busy' => $busy];
+                        } elseif (strpos($engineLower, 'videoenhance') !== false || strpos($engineLower, 'vebox') !== false || strpos($engineLower, 'vecs') !== false) {
+                            $clientEntry['engine-classes']['VideoEnhance'] = ['busy' => $busy];
+                        } elseif (strpos($engineLower, 'compute') !== false || strpos($engineLower, 'ccs') !== false) {
+                            $clientEntry['engine-classes']['Compute'] = ['busy' => $busy];
+                        }
+                    }
+                }
+                
+                $output['clients'][] = $clientEntry;
+            }
+        }
+        
+        // Fallback to sysfs for client detection if qmassa didn't provide any
+        // (qmassa may not support client tracking on XE driver yet)
+        if (empty($output['clients'])) {
+            if ($fdinfoUsage === null) {
+                $fdinfoUsage = $this->getXeFdinfoUsage($pciId);
+            }
+            if (!empty($fdinfoUsage['clients'])) {
+                $output['clients'] = $fdinfoUsage['clients'];
+                error_log("gpustat: Found " . count($output['clients']) . " clients from fdinfo fallback");
+            }
+        }
+
+        if (empty($output['clients'])) {
+            error_log("gpustat: qmassa returned no clients, falling back to sysfs for client detection");
+            $clientsPath = "/sys/kernel/debug/dri/$pciId/clients";
+            if (file_exists($clientsPath)) {
+                $lines = file($clientsPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+                if ($lines && count($lines) > 1) {
+                    array_shift($lines); // Remove header
+                    foreach ($lines as $line) {
+                        $columns = preg_split('/\s+/', trim($line));
+                        if (count($columns) >= 2) {
+                            if ($this->isExcludedClientProcess($columns[0])) {
+                                continue;
+                            }
+                            $output['clients'][] = [
+                                "name" => $columns[0],
+                                "pid" => $columns[1],
+                                "memory" => [
+                                    "system" => [
+                                        "total" => 0
+                                    ]
+                                ],
+                                "engine-classes" => []
+                            ];
+                        }
+                    }
+                    error_log("gpustat: Found " . count($output['clients']) . " clients from sysfs fallback");
+                }
+            }
+        }
+        
+        // Calculate RC6 residency from throttle status if available
+        // For now, leave at 0 as the actual calculation would need historical data
+        
+        // Debug: log final client count
+        error_log("gpustat: Transformed data has " . count($output['clients']) . " clients");
+        
+        return $output;
     }
       
 
