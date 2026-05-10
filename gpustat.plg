@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "gpustat">
 <!ENTITY author    "SimonFair">
-<!ENTITY version   "2026.05.08">
+<!ENTITY version   "2026.05.10">
 <!ENTITY launch    "Settings/GPUStatSettings">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/SimonFair/&name;-unraid/master">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
@@ -49,6 +49,10 @@
 -->
 
 <CHANGES>
+###2026.05.10
+
+- Add i915 options to use qmassa backend with intel_gpu_top for additional metrics. New setting option.
+
 ###2026.05.08
 
 - Add inital support using qmassa for XE stats.
