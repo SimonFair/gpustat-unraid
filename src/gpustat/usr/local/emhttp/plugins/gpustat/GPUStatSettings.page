@@ -80,6 +80,15 @@ Title="GPU Statistics"
     }
 
     $cfg = $gpustat_cfg        = parse_plugin_cfg("gpustat", true);
+    if (!isset($gpustat_cfg['INTELBACKEND']) || $gpustat_cfg['INTELBACKEND'] == '') {
+      $gpustat_cfg['INTELBACKEND'] = 'top';
+    }
+    if ($gpustat_cfg['INTELBACKEND'] == 'intel_gpu_top') {
+      $gpustat_cfg['INTELBACKEND'] = 'top';
+    }
+    if ($gpustat_cfg['INTELBACKEND'] == 'auto') {
+      $gpustat_cfg['INTELBACKEND'] = 'top_qmassa';
+    }
     $gpustat_inventory  = true;
 
     $multi_enable=version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.12.0-beta5', '>') ;
@@ -237,6 +246,13 @@ Throttle Status:
 
 
 <h4><b>Intel Specific</b></h4>
+
+Intel Backend (i915):
+: <select id="INTELBACKEND" name="INTELBACKEND" size="1">
+  <?=mk_option($gpustat_cfg['INTELBACKEND'], "top", "intel_gpu_top (top)");?>
+  <?=mk_option($gpustat_cfg['INTELBACKEND'], "top_qmassa", "intel_gpu_top + qmassa");?>
+    <?=mk_option($gpustat_cfg['INTELBACKEND'], "qmassa", "qmassa only");?>
+  </select>
 
 3D Render Load:
 : <select id="DISP3DRENDER" name="DISP3DRENDER" size="1">

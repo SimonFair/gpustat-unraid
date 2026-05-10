@@ -43,6 +43,8 @@ class Intel extends Main
     const STATISTICS_WRAPPER = 'timeout -k ';
     const QMASSA_CMD = 'qmassa';
     const QMASSA_TIMEOUT = 10; // seconds - increased for GPU initialization
+    const QMASSA_FALLBACK_TIMEOUT = 5; // seconds - short timeout for i915 fallback metrics only
+    const QMASSA_FALLBACK_INTERVAL_MS = 200;
     
     /**
      * Intel constructor.
@@ -64,7 +66,9 @@ class Intel extends Main
         }
 
         $processName = strtolower(trim($name));
-        return $processName === 'qmassa' || strpos($processName, '/qmassa') !== false;
+        return $processName === 'qmassa'
+            || strpos($processName, '/qmassa') !== false
+            || $processName === 'timeout';
     }
 
     /**
@@ -280,6 +284,137 @@ class Intel extends Main
         }
 
         return $gpuPower <= 0.0 && $pkgPower <= 0.0 && $temp <= 0.0 && $freq <= 0.0 && $memUtil <= 0.0 && $engineBusy <= 0.0;
+    }
+
+    /**
+     * Run qmassa once and extract only power/fan fallback metrics.
+     */
+    private function getQmassaFallbackMetrics(string $pciId): ?array
+    {
+        $qmassaPath = trim((string)shell_exec('which ' . self::QMASSA_CMD . ' 2>/dev/null'));
+        if ($qmassaPath === '') {
+            return null;
+        }
+
+        $safeFileName = str_replace(':', '_', $pciId);
+        $tempJsonFile = "/tmp/gpustat_qmassa_fallback_{$safeFileName}.json";
+
+        // Fast path for i915 fallback: short headless run; two samples avoids first-sample zeros.
+        $command = sprintf(
+            'timeout %d %s -x -w -m %d -n 2 -t %s -d %s 2>/dev/null',
+            self::QMASSA_FALLBACK_TIMEOUT,
+            $qmassaPath,
+            self::QMASSA_FALLBACK_INTERVAL_MS,
+            escapeshellarg($tempJsonFile),
+            escapeshellarg($pciId)
+        );
+
+        exec($command, $output, $returnCode);
+        if ($returnCode !== 0 || !is_file($tempJsonFile)) {
+            @unlink($tempJsonFile);
+            return null;
+        }
+
+        $qmassaLines = file($tempJsonFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        @unlink($tempJsonFile);
+        if (!is_array($qmassaLines) || count($qmassaLines) < 3) {
+            return null;
+        }
+
+        $decoded = null;
+        for ($i = count($qmassaLines) - 1; $i >= 0; $i--) {
+            $candidate = json_decode((string)$qmassaLines[$i], true);
+            if (is_array($candidate) && isset($candidate['devs_state']) && is_array($candidate['devs_state'])) {
+                $decoded = $candidate;
+                break;
+            }
+        }
+        if (!is_array($decoded) || !isset($decoded['devs_state']) || !is_array($decoded['devs_state'])) {
+            return null;
+        }
+
+        $deviceData = null;
+        foreach ($decoded['devs_state'] as $device) {
+            if (isset($device['pci_dev']) && (string)$device['pci_dev'] === $pciId) {
+                $deviceData = $device;
+                break;
+            }
+        }
+        if (!is_array($deviceData)) {
+            return null;
+        }
+
+        $devStats = isset($deviceData['dev_stats']) && is_array($deviceData['dev_stats']) ? $deviceData['dev_stats'] : [];
+
+        $powerGpu = 0.0;
+        $powerPkg = 0.0;
+        if (isset($devStats['power']) && is_array($devStats['power']) && !empty($devStats['power'])) {
+            $lastPowerSample = $devStats['power'][count($devStats['power']) - 1];
+            if (is_array($lastPowerSample)) {
+                $powerGpu = isset($lastPowerSample['gpu_cur_power']) && is_numeric($lastPowerSample['gpu_cur_power'])
+                    ? (float)$lastPowerSample['gpu_cur_power']
+                    : 0.0;
+                $powerPkg = isset($lastPowerSample['pkg_cur_power']) && is_numeric($lastPowerSample['pkg_cur_power'])
+                    ? (float)$lastPowerSample['pkg_cur_power']
+                    : 0.0;
+            }
+        }
+
+        $fanRpm = 0.0;
+        if (isset($devStats['fans']) && is_array($devStats['fans']) && !empty($devStats['fans'])) {
+            $lastFanSample = $devStats['fans'][count($devStats['fans']) - 1];
+            $stack = [$lastFanSample];
+            while (!empty($stack)) {
+                $item = array_pop($stack);
+                if (!is_array($item)) {
+                    continue;
+                }
+                if (isset($item['speed']) && is_numeric($item['speed'])) {
+                    $fanRpm = max($fanRpm, (float)$item['speed']);
+                }
+                foreach ($item as $child) {
+                    if (is_array($child)) {
+                        $stack[] = $child;
+                    }
+                }
+            }
+        }
+
+        $memTotalMiB = 0.0;
+        $memUsedMiB = 0.0;
+        if (isset($devStats['mem_info']) && is_array($devStats['mem_info']) && !empty($devStats['mem_info'])) {
+            $lastMemSample = $devStats['mem_info'][count($devStats['mem_info']) - 1];
+            if (is_array($lastMemSample)) {
+                $vramTotal = isset($lastMemSample['vram_total']) && is_numeric($lastMemSample['vram_total'])
+                    ? (float)$lastMemSample['vram_total']
+                    : 0.0;
+                $vramUsed = isset($lastMemSample['vram_used']) && is_numeric($lastMemSample['vram_used'])
+                    ? (float)$lastMemSample['vram_used']
+                    : 0.0;
+                if ($vramTotal > 0) {
+                    $memTotalMiB = $vramTotal / (1024 * 1024);
+                    $memUsedMiB = $vramUsed / (1024 * 1024);
+                }
+            }
+        }
+
+        $powerUnit = 'W';
+
+        if ($this->settings['DISPPWRDRWSEL'] == "PACKAGE") {
+            $power = $powerPkg;
+        } elseif ($this->settings['DISPPWRDRWSEL'] == "GPU") {
+            $power = $powerGpu;
+        } else {
+            $power = max($powerGpu, $powerPkg);
+        }
+
+        return [
+            'power' => $power,
+            'power_unit' => $powerUnit,
+            'fan_rpm' => $fanRpm,
+            'mem_total_mib' => $memTotalMiB,
+            'mem_used_mib' => $memUsedMiB
+        ];
     }
 
     private function getFdinfoCacheFile(string $pciId): string
@@ -514,15 +649,29 @@ class Intel extends Main
         $driver = $this->getKernelDriver($this->settings['GPUID']);
         if ($driver == "xe") $driver = "XE";
         if ($driver != "XE" && $driver != "i915") $driver = "i915";
+        $intelBackend = isset($this->settings['INTELBACKEND']) ? strtolower((string)$this->settings['INTELBACKEND']) : 'top';
+        if ($intelBackend === 'intel_gpu_top') {
+            $intelBackend = 'top';
+        }
+        if ($intelBackend === 'auto') {
+            $intelBackend = 'top_qmassa';
+        }
+        if ($intelBackend !== 'top' && $intelBackend !== 'top_qmassa' && $intelBackend !== 'qmassa') {
+            $intelBackend = 'top';
+        }
         if (!$this->checkVFIO($this->settings['GPUID']))
         {
             if (($this->cmdexists && $driver == "i915") || $driver =="XE") {
                 //Command invokes intel_gpu_top in JSON output mode with an update rate of 5 seconds
                 if ($driver != "XE") {
-                    $command = self::CMD_UTILITY;
-                    $this->runCommand($command, self::STATISTICS_PARAM. $this->settings['GPUID'].'"', false); 
+                    if ($intelBackend === 'qmassa') {
+                        $this->stdout = $this->buildXEJSONQmassa($this->settings['GPUID']);
+                    } else {
+                        $command = self::CMD_UTILITY;
+                        $this->runCommand($command, self::STATISTICS_PARAM. $this->settings['GPUID'].'"', false);
+                    }
                 } else {
-                    // Try qmassa first, will fallback to sysfs if qmassa not available
+                    // XE backend is fixed to qmassa.
                     $this->stdout = $this->buildXEJSONQmassa($this->settings['GPUID']);
                     $this->cmdexists = true;
                 }
@@ -603,6 +752,25 @@ class Intel extends Main
         #$data=json_decode(file_get_contents("/tmp/jsonin"),true);
         // intel_gpu_top will never show utilization counters on the first sample so we need the second position
         unset($stdout, $this->stdout);
+
+        $currentDriver = $this->getKernelDriver($this->settings['GPUID']);
+        if ($currentDriver == "xe") {
+            $currentDriver = "XE";
+        }
+        if ($currentDriver != "XE" && $currentDriver != "i915") {
+            $currentDriver = "i915";
+        }
+        $intelBackend = isset($this->settings['INTELBACKEND']) ? strtolower((string)$this->settings['INTELBACKEND']) : 'top';
+        if ($intelBackend === 'intel_gpu_top') {
+            $intelBackend = 'top';
+        }
+        if ($intelBackend === 'auto') {
+            $intelBackend = 'top_qmassa';
+        }
+        if ($intelBackend !== 'top' && $intelBackend !== 'top_qmassa' && $intelBackend !== 'qmassa') {
+            $intelBackend = 'top';
+        }
+        $qmassaFallbackMetrics = null;
 
         if (!empty($data)) {
 
@@ -690,6 +858,25 @@ class Intel extends Main
                     }
                 }
 
+                // i915 fallback: if power is still zero, query qmassa and use only power reading.
+                $powerValueCurrent = 0.0;
+                if (preg_match('/([0-9]+(?:\.[0-9]+)?)/', (string)$this->pageData['power'], $powerCurrentMatches)) {
+                    $powerValueCurrent = (float)$powerCurrentMatches[1];
+                }
+                if ($currentDriver == "i915" && $intelBackend == "top_qmassa" && $powerValueCurrent <= 0) {
+                    if ($qmassaFallbackMetrics === null) {
+                        $qmassaFallbackMetrics = $this->getQmassaFallbackMetrics($this->settings['GPUID']);
+                    }
+                    if (is_array($qmassaFallbackMetrics) && isset($qmassaFallbackMetrics['power']) && (float)$qmassaFallbackMetrics['power'] > 0) {
+                        $powerUnitOut = isset($qmassaFallbackMetrics['power_unit']) && $qmassaFallbackMetrics['power_unit'] !== ''
+                            ? $qmassaFallbackMetrics['power_unit']
+                            : (isset($powerunit) && $powerunit !== '' ? $powerunit : 'W');
+                        $powerFallback = (float)$qmassaFallbackMetrics['power'];
+                        $this->pageData['power'] = $this->roundFloat($powerFallback, 1) . $powerUnitOut;
+                        $this->setCachedIntelPowerReading($this->settings['GPUID'], $powerFallback);
+                    }
+                }
+
                 $powerMax = null;
                 if (isset($data['power']['max']) && is_numeric($data['power']['max'])) {
                     $powerMax = (float)$data['power']['max'];
@@ -708,17 +895,40 @@ class Intel extends Main
             }
             if ($this->settings['DISPFAN']) {
                 $path = glob("/sys/bus/pci/devices/{$this->settings['GPUID']}/hwmon/*/fan1_input");
+                $fanValue = null;
                 if (isset($path[0]) && is_file($path[0])) {
                     $fanReading = $this->readSysfsData($path[0]);
+                    if ($fanReading >= 0) {
+                        // Some cards legitimately report 0 RPM at idle (fan-stop mode).
+                        $fanValue = $fanReading;
+                    }
                     if ($fanReading > 0) {
                         $this->setCachedIntelFanRpm($this->settings['GPUID'], $fanReading);
-                        $this->pageData['fan'] = (int)$this->roundFloat($fanReading);
-                    } else {
+                    } elseif ($fanValue === null) {
                         $cachedFan = $this->getCachedIntelFanRpm($this->settings['GPUID']);
-                        $this->pageData['fan'] = $cachedFan !== null ? (int)$this->roundFloat($cachedFan) : 'N/A';
+                        if ($cachedFan !== null) {
+                            $fanValue = $cachedFan;
+                        }
                     }
-                    $this->pageData['fanmax'] = 4000;
                 }
+
+                // i915 fallback: if fan sensor is unavailable, query qmassa and use only fan speed.
+                if ($fanValue === null && $currentDriver == "i915" && $intelBackend == "top_qmassa") {
+                    if ($qmassaFallbackMetrics === null) {
+                        $qmassaFallbackMetrics = $this->getQmassaFallbackMetrics($this->settings['GPUID']);
+                    }
+                    if (is_array($qmassaFallbackMetrics) && isset($qmassaFallbackMetrics['fan_rpm']) && (float)$qmassaFallbackMetrics['fan_rpm'] > 0) {
+                        $fanValue = (float)$qmassaFallbackMetrics['fan_rpm'];
+                        $this->setCachedIntelFanRpm($this->settings['GPUID'], $fanValue);
+                    }
+                }
+
+                if ($fanValue !== null && $fanValue >= 0) {
+                    $this->pageData['fan'] = (int)$this->roundFloat($fanValue);
+                } else {
+                    $this->pageData['fan'] = 'N/A';
+                }
+                $this->pageData['fanmax'] = 4000;
             }
             if ($this->settings['DISPTEMP']) {
                 if (isset($data['temperature']) && is_numeric($data['temperature'])) {
@@ -766,6 +976,19 @@ class Intel extends Main
                     $memUsed = (float)$data['memused'];
                 }
 
+                // i915 fallback: if memory is missing/zero, query qmassa and use only memory values.
+                if ($currentDriver == "i915" && $intelBackend == "top_qmassa" && ($memTotal === null || $memTotal <= 0 || $memUsed === null || $memUsed <= 0)) {
+                    if ($qmassaFallbackMetrics === null) {
+                        $qmassaFallbackMetrics = $this->getQmassaFallbackMetrics($this->settings['GPUID']);
+                    }
+                    if (is_array($qmassaFallbackMetrics) && isset($qmassaFallbackMetrics['mem_total_mib']) && (float)$qmassaFallbackMetrics['mem_total_mib'] > 0) {
+                        $memTotal = (float)$qmassaFallbackMetrics['mem_total_mib'];
+                        $memUsed = isset($qmassaFallbackMetrics['mem_used_mib']) && is_numeric($qmassaFallbackMetrics['mem_used_mib'])
+                            ? max(0.0, (float)$qmassaFallbackMetrics['mem_used_mib'])
+                            : 0.0;
+                    }
+                }
+
                 if ($memTotal !== null && $memUsed !== null && $memTotal > 0) {
                     $memUtilPercent = $this->roundFloat(($memUsed / $memTotal) * 100, 1) . "%";
                     $this->pageData['memutil'] = $memUtilPercent;
@@ -793,6 +1016,9 @@ class Intel extends Main
                         $clientRender = $clientBlitter = $clientVideo = $clientVideoEnh = $clientCompute = 0 ;
                         foreach ($data['clients'] as $id => $process) {
                             if (isset($process["name"])) {
+                                if ($this->isExcludedClientProcess($process["name"])) {
+                                    continue;
+                                }
                                 $process_array = [
                                     "pid" => $process["pid"],
                                     "name" => $process["name"],
@@ -1253,6 +1479,33 @@ class Intel extends Main
                         break;
                     }
                 }
+            }
+        }
+
+        // Map fan speed data - fans is array of samples with nested fan sensors.
+        if (isset($devStats['fans']) && is_array($devStats['fans']) && !empty($devStats['fans'])) {
+            $lastFanSample = $devStats['fans'][count($devStats['fans']) - 1];
+            $fanRpm = 0.0;
+            $stack = [$lastFanSample];
+            while (!empty($stack)) {
+                $item = array_pop($stack);
+                if (!is_array($item)) {
+                    continue;
+                }
+                if (isset($item['speed']) && is_numeric($item['speed'])) {
+                    $fanRpm = max($fanRpm, (float)$item['speed']);
+                }
+                foreach ($item as $child) {
+                    if (is_array($child)) {
+                        $stack[] = $child;
+                    }
+                }
+            }
+            if ($fanRpm > 0) {
+                $output['fan'] = [
+                    'rpm' => $fanRpm,
+                    'unit' => 'RPM'
+                ];
             }
         }
 

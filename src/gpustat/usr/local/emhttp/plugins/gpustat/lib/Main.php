@@ -514,12 +514,12 @@ class Main
         }
         
         // Set page data
-        if ($max_speed !== null) {
-            $this->pageData['pciegen'] = $this->get_pcie_gen($max_speed);
+        if ($current_speed !== null) {
+            $this->pageData['pciegen'] = $this->get_pcie_gen($current_speed);
         }
         
-        if ($current_speed !== null) {
-            $this->pageData['pciegenmax'] = $this->get_pcie_gen($current_speed);
+        if ($max_speed !== null) {
+            $this->pageData['pciegenmax'] = $this->get_pcie_gen($max_speed);
         } else {
             $this->pageData['pciegenmax'] = "N/A";
         }
