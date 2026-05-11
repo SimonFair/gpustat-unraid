@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "gpustat">
 <!ENTITY author    "SimonFair">
-<!ENTITY version   "2026.05.10">
+<!ENTITY version   "2026.05.11">
 <!ENTITY launch    "Settings/GPUStatSettings">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/SimonFair/&name;-unraid/master">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
@@ -49,6 +49,12 @@
 -->
 
 <CHANGES>
+###2026.05.11
+
+- Add frequency of GPU
+- Change fan label to be Fan (RPM)
+- Fix spacing in PCI info.
+
 ###2026.05.10
 
 - Add i915 options to use qmassa backend with intel_gpu_top for additional metrics. New setting option.
