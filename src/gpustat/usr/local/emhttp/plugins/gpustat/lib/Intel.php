@@ -287,7 +287,7 @@ class Intel extends Main
     }
 
     /**
-     * Run qmassa once and extract only power/fan fallback metrics.
+     * Run qmassa once and extract fallback metrics for top_qmassa mode.
      */
     private function getQmassaFallbackMetrics(string $pciId): ?array
     {
@@ -360,7 +360,7 @@ class Intel extends Main
             }
         }
 
-        $fanRpm = 0.0;
+        $fanRpm = null;
         if (isset($devStats['fans']) && is_array($devStats['fans']) && !empty($devStats['fans'])) {
             $lastFanSample = $devStats['fans'][count($devStats['fans']) - 1];
             $stack = [$lastFanSample];
@@ -370,13 +370,28 @@ class Intel extends Main
                     continue;
                 }
                 if (isset($item['speed']) && is_numeric($item['speed'])) {
-                    $fanRpm = max($fanRpm, (float)$item['speed']);
+                    $fanRpm = max($fanRpm ?? 0.0, (float)$item['speed']);
                 }
                 foreach ($item as $child) {
                     if (is_array($child)) {
                         $stack[] = $child;
                     }
                 }
+            }
+        }
+
+        $freqRequestedMHz = null;
+        $freqActualMHz = null;
+        if (isset($devStats['freqs']) && is_array($devStats['freqs']) && !empty($devStats['freqs'])) {
+            $lastFreqSample = $devStats['freqs'][count($devStats['freqs']) - 1];
+            if (is_array($lastFreqSample) && isset($lastFreqSample[0]) && is_array($lastFreqSample[0])) {
+                $freqData = $lastFreqSample[0];
+                $freqRequestedMHz = isset($freqData['cur_freq']) && is_numeric($freqData['cur_freq'])
+                    ? (float)$freqData['cur_freq']
+                    : null;
+                $freqActualMHz = isset($freqData['act_freq']) && is_numeric($freqData['act_freq'])
+                    ? (float)$freqData['act_freq']
+                    : null;
             }
         }
 
@@ -412,6 +427,8 @@ class Intel extends Main
             'power' => $power,
             'power_unit' => $powerUnit,
             'fan_rpm' => $fanRpm,
+            'freq_requested_mhz' => $freqRequestedMHz,
+            'freq_actual_mhz' => $freqActualMHz,
             'mem_total_mib' => $memTotalMiB,
             'mem_used_mib' => $memUsedMiB
         ];
@@ -615,29 +632,31 @@ class Intel extends Main
     {
         $result = [];
 
+        // Inventory should still work when intel_gpu_top is unavailable.
+        $statsCmdExists = $this->cmdexists;
+        $this->checkCommand(self::INVENTORY_UTILITY, false);
         if ($this->cmdexists) {
-            $this->checkCommand(self::INVENTORY_UTILITY, false);
-            if ($this->cmdexists) {
-                $this->runCommand(self::INVENTORY_UTILITY, self::INVENTORY_PARAM, false);
-                if (!empty($this->stdout) && strlen($this->stdout) > 0) {
-                    foreach(explode(PHP_EOL,$this->stdout) AS $vga) {
-                        preg_match_all('/"([^"]*)"|(\S+)/', $vga, $matches);
-                        if (!isset( $matches[0][0])) continue ;
-                        $id = str_replace('"', '', $matches[0][0]) ;
-                        $vendor = str_replace('"', '',$matches[0][2]) ;
-                        $model = str_replace('"', '',$matches[0][3]) ;
-                        if ($vendor != "Intel Corporation") continue ;
-                        $result[$id] = [
-                            'id' => substr($id,5) ,
-                            'model' => $model,
-                            'vendor' => 'intel',
-                            'guid' => $id
-                        ];
+            $this->runCommand(self::INVENTORY_UTILITY, self::INVENTORY_PARAM, false);
+            if (!empty($this->stdout) && strlen($this->stdout) > 0) {
+                foreach(explode(PHP_EOL,$this->stdout) AS $vga) {
+                    preg_match_all('/"([^"]*)"|(\S+)/', $vga, $matches);
+                    if (!isset( $matches[0][0])) continue ;
+                    $id = str_replace('"', '', $matches[0][0]) ;
+                    $vendor = str_replace('"', '',$matches[0][2]) ;
+                    $model = str_replace('"', '',$matches[0][3]) ;
+                    if ($vendor != "Intel Corporation") continue ;
+                    $result[$id] = [
+                        'id' => substr($id,5) ,
+                        'model' => $model,
+                        'vendor' => 'intel',
+                        'guid' => $id
+                    ];
 
-                     }
                  }
-            }
+             }
         }
+
+        $this->cmdexists = $statsCmdExists;
         return $result;
     }
 
@@ -894,32 +913,48 @@ class Intel extends Main
                 }
             }
             if ($this->settings['DISPFAN']) {
-                $path = glob("/sys/bus/pci/devices/{$this->settings['GPUID']}/hwmon/*/fan1_input");
                 $fanValue = null;
-                if (isset($path[0]) && is_file($path[0])) {
-                    $fanReading = $this->readSysfsData($path[0]);
-                    if ($fanReading >= 0) {
-                        // Some cards legitimately report 0 RPM at idle (fan-stop mode).
-                        $fanValue = $fanReading;
+                // Prefer qmassa fan readings whenever qmassa is an enabled backend.
+                if ($intelBackend == "qmassa"
+                    && isset($data['fan']['rpm'])
+                    && is_numeric($data['fan']['rpm'])) {
+                    $fanValue = (float)$data['fan']['rpm'];
+                    if ($fanValue > 0) {
+                        $this->setCachedIntelFanRpm($this->settings['GPUID'], $fanValue);
                     }
-                    if ($fanReading > 0) {
-                        $this->setCachedIntelFanRpm($this->settings['GPUID'], $fanReading);
-                    } elseif ($fanValue === null) {
-                        $cachedFan = $this->getCachedIntelFanRpm($this->settings['GPUID']);
-                        if ($cachedFan !== null) {
-                            $fanValue = $cachedFan;
+                }
+
+                if ($fanValue === null && $intelBackend == "top_qmassa") {
+                    if ($qmassaFallbackMetrics === null) {
+                        $qmassaFallbackMetrics = $this->getQmassaFallbackMetrics($this->settings['GPUID']);
+                    }
+                    if (is_array($qmassaFallbackMetrics)
+                        && array_key_exists('fan_rpm', $qmassaFallbackMetrics)
+                        && $qmassaFallbackMetrics['fan_rpm'] !== null
+                        && is_numeric($qmassaFallbackMetrics['fan_rpm'])) {
+                        $fanValue = (float)$qmassaFallbackMetrics['fan_rpm'];
+                        if ($fanValue > 0) {
+                            $this->setCachedIntelFanRpm($this->settings['GPUID'], $fanValue);
                         }
                     }
                 }
 
-                // i915 fallback: if fan sensor is unavailable, query qmassa and use only fan speed.
-                if ($fanValue === null && $currentDriver == "i915" && $intelBackend == "top_qmassa") {
-                    if ($qmassaFallbackMetrics === null) {
-                        $qmassaFallbackMetrics = $this->getQmassaFallbackMetrics($this->settings['GPUID']);
-                    }
-                    if (is_array($qmassaFallbackMetrics) && isset($qmassaFallbackMetrics['fan_rpm']) && (float)$qmassaFallbackMetrics['fan_rpm'] > 0) {
-                        $fanValue = (float)$qmassaFallbackMetrics['fan_rpm'];
-                        $this->setCachedIntelFanRpm($this->settings['GPUID'], $fanValue);
+                if ($fanValue === null) {
+                    $path = glob("/sys/bus/pci/devices/{$this->settings['GPUID']}/hwmon/*/fan1_input");
+                    if (isset($path[0]) && is_file($path[0])) {
+                        $fanReading = $this->readSysfsData($path[0]);
+                        if ($fanReading >= 0) {
+                            // Some cards legitimately report 0 RPM at idle (fan-stop mode).
+                            $fanValue = $fanReading;
+                        }
+                        if ($fanReading > 0) {
+                            $this->setCachedIntelFanRpm($this->settings['GPUID'], $fanReading);
+                        } elseif ($fanValue === null) {
+                            $cachedFan = $this->getCachedIntelFanRpm($this->settings['GPUID']);
+                            if ($cachedFan !== null) {
+                                $fanValue = $cachedFan;
+                            }
+                        }
                     }
                 }
 
@@ -999,7 +1034,19 @@ class Intel extends Main
                 }
             }
             if ($this->settings['DISPCLOCKS']) {
-                if (isset($data['frequency']['actual'])) {
+                // In top_qmassa mode, prefer qmassa frequency over intel_gpu_top frequency.
+                if ($intelBackend == "top_qmassa") {
+                    if ($qmassaFallbackMetrics === null) {
+                        $qmassaFallbackMetrics = $this->getQmassaFallbackMetrics($this->settings['GPUID']);
+                    }
+                    if (is_array($qmassaFallbackMetrics)
+                        && isset($qmassaFallbackMetrics['freq_actual_mhz'])
+                        && is_numeric($qmassaFallbackMetrics['freq_actual_mhz'])) {
+                        $this->pageData['clock'] = (int) $this->roundFloat((float)$qmassaFallbackMetrics['freq_actual_mhz']);
+                    } elseif (isset($data['frequency']['actual'])) {
+                        $this->pageData['clock'] = (int) $this->roundFloat($data['frequency']['actual']);
+                    }
+                } elseif (isset($data['frequency']['actual'])) {
                     $this->pageData['clock'] = (int) $this->roundFloat($data['frequency']['actual']);
                 }
             }
@@ -1314,6 +1361,11 @@ class Intel extends Main
             // Log error and fallback
             error_log("gpustat: qmassa failed for $pciId (code: $returnCode), file exists: " . (file_exists($tempJsonFile) ? 'yes' : 'no') . ", falling back to sysfs");
             @unlink($tempJsonFile);
+            $cachedSample = $this->getCachedQmassaSample($pciId);
+            if ($cachedSample !== null) {
+                error_log("gpustat: Using cached qmassa sample for $pciId after qmassa execution failure");
+                return json_encode([$cachedSample, $cachedSample], JSON_PRETTY_PRINT);
+            }
             return $this->buildXEJSON($pciId);
         }
         
@@ -1328,6 +1380,11 @@ class Intel extends Main
         
         if (empty($qmassaLines) || count($qmassaLines) < 3) {
             error_log("gpustat: qmassa returned insufficient output for $pciId (expected at least 3 lines, got " . count($qmassaLines) . ")");
+            $cachedSample = $this->getCachedQmassaSample($pciId);
+            if ($cachedSample !== null) {
+                error_log("gpustat: Using cached qmassa sample for $pciId after insufficient qmassa output");
+                return json_encode([$cachedSample, $cachedSample], JSON_PRETTY_PRINT);
+            }
             return $this->buildXEJSON($pciId);
         }
         
@@ -1363,6 +1420,15 @@ class Intel extends Main
             // Transform qmassa output to intel_gpu_top compatible format
             $jsonOutput = $this->transformQmassaToIntelFormat($deviceData, $pciId);
 
+            // qmassa can intermittently emit empty client lists on XE; preserve recent clients/icons.
+            if (empty($jsonOutput['clients'])) {
+                $cachedSample = $this->getCachedQmassaSample($pciId);
+                if ($cachedSample !== null && isset($cachedSample['clients']) && is_array($cachedSample['clients']) && !empty($cachedSample['clients'])) {
+                    $jsonOutput['clients'] = $cachedSample['clients'];
+                    error_log("gpustat: Reused cached qmassa clients for $pciId due to empty client sample");
+                }
+            }
+
             // qmassa occasionally yields transient all-zero samples on refresh.
             // Reuse the last good sample briefly to avoid flashing zeros.
             if ($this->isLikelyTransientZeroSample($jsonOutput)) {
@@ -1387,6 +1453,11 @@ class Intel extends Main
             
         } catch (JsonException $e) {
             error_log("gpustat: Failed to parse qmassa JSON for $pciId: " . $e->getMessage());
+            $cachedSample = $this->getCachedQmassaSample($pciId);
+            if ($cachedSample !== null) {
+                error_log("gpustat: Using cached qmassa sample for $pciId after parse failure");
+                return json_encode([$cachedSample, $cachedSample], JSON_PRETTY_PRINT);
+            }
             return $this->buildXEJSON($pciId);
         }
     }
