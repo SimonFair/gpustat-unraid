@@ -495,7 +495,7 @@ class Main
             }
         }
 
-        if ($driver === 'xe') {
+        if ($driver === 'xe' && $this->isDebugLoggingEnabled()) {
             $debugFile = "/tmp/gpustat_pcie_debug_" . str_replace(':', '_', $pciid) . ".log";
             $debug = [
                 'time' => date(DATE_RFC2822),
@@ -729,6 +729,36 @@ class Main
         return $cgroup;
     }
 
+    protected function isDebugLoggingEnabled(): bool
+    {
+        $value = $this->settings['DEBUGLOG'] ?? 0;
+
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return (int)$value !== 0;
+        }
+
+        if (is_string($value)) {
+            $normalized = strtolower(trim($value));
+            return in_array($normalized, ['1', 'true', 'yes', 'on'], true);
+        }
+
+        return false;
+    }
+
+    protected function debugLog(string $message): void
+    {
+        if (!$this->isDebugLoggingEnabled()) {
+            return;
+        }
+
+        $line = sprintf("[%s] gpustat: %s\n", date('d-M-Y H:i:s T'), $message);
+        @file_put_contents('/var/log/gpustats.debug', $line, FILE_APPEND | LOCK_EX);
+    }
+
     /**
      * Retrieves docker container info for a given docker ID
      *
@@ -768,7 +798,9 @@ class Main
         }
 
         if (!$controlGroup || !$dockerInfo) {
-            file_put_contents("/tmp/hostapps",json_encode($this->hostapps));
+            if ($this->isDebugLoggingEnabled()) {
+                file_put_contents('/tmp/hostapps', json_encode($this->hostapps));
+            }
             if (isset($this->hostapps[strtolower($process['name'])])) $icon = $this->hostapps[strtolower($process['name'])]; else $icon=Self::DOCKER_ICON_DEFAULT_PATH;
             $active_app = [
                 'name' => (string) $process['name'],

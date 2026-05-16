@@ -89,6 +89,9 @@ Title="GPU Statistics"
     if ($gpustat_cfg['INTELBACKEND'] == 'auto') {
       $gpustat_cfg['INTELBACKEND'] = 'top_qmassa';
     }
+    if (!isset($gpustat_cfg['DEBUGLOG']) || $gpustat_cfg['DEBUGLOG'] == '') {
+      $gpustat_cfg['DEBUGLOG'] = '0';
+    }
     $gpustat_inventory  = true;
 
     $multi_enable=version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.12.0-beta5', '>') ;
@@ -177,6 +180,12 @@ UI Automatic Refresh / Interval (Milliseconds):
     <?=mk_option($gpustat_cfg['UIREFRESH'], "1", "Yes");?>
   </select>
   <input type="number" name="UIREFRESHINT" class="narrow" min="2000" maxlength="5" value="<?=$gpustat_cfg['UIREFRESHINT'];?>" placeholder="5000">
+
+Enable Debug Logging:
+: <select id="DEBUGLOG" name="DEBUGLOG" size="1">
+    <?=mk_option($gpustat_cfg['DEBUGLOG'], "0", "No");?>
+    <?=mk_option($gpustat_cfg['DEBUGLOG'], "1", "Yes");?>
+  </select>
 
 <h2><b>Enabled Pollers</b></h2>
 

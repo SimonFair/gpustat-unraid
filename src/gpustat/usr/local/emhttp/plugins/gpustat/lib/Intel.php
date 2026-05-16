@@ -1316,11 +1316,11 @@ class Intel extends Main
         $qmassaPath = trim(shell_exec('which ' . self::QMASSA_CMD . ' 2>/dev/null'));
         
         // Debug: log qmassa path
-        error_log("gpustat: qmassa path lookup result: " . ($qmassaPath ?: 'NOT FOUND'));
+        $this->debugLog("qmassa path lookup result: " . ($qmassaPath ?: 'NOT FOUND'));
         
         if (empty($qmassaPath)) {
             // Fallback to sysfs method if qmassa not found
-            error_log("gpustat: qmassa binary not found in PATH, falling back to sysfs");
+            $this->debugLog("qmassa binary not found in PATH, falling back to sysfs");
             return $this->buildXEJSON($pciId);
         }
         
@@ -1345,25 +1345,25 @@ class Intel extends Main
         );
         
         // Debug: log the command being executed
-        error_log("gpustat: Executing qmassa command: $command");
+        $this->debugLog("Executing qmassa command: $command");
         
         // Execute qmassa
         exec($command, $output, $returnCode);
         
         // Debug: log execution results
-        error_log("gpustat: qmassa return code: $returnCode, output lines: " . count($output));
+        $this->debugLog("qmassa return code: $returnCode, output lines: " . count($output));
         if ($returnCode !== 0) {
-            error_log("gpustat: qmassa stderr: " . implode("\n", $output));
+            $this->debugLog("qmassa stderr: " . implode("\n", $output));
         }
         
         // Check if qmassa executed successfully
         if ($returnCode !== 0 || !file_exists($tempJsonFile)) {
             // Log error and fallback
-            error_log("gpustat: qmassa failed for $pciId (code: $returnCode), file exists: " . (file_exists($tempJsonFile) ? 'yes' : 'no') . ", falling back to sysfs");
+            $this->debugLog("qmassa failed for $pciId (code: $returnCode), file exists: " . (file_exists($tempJsonFile) ? 'yes' : 'no') . ", falling back to sysfs");
             @unlink($tempJsonFile);
             $cachedSample = $this->getCachedQmassaSample($pciId);
             if ($cachedSample !== null) {
-                error_log("gpustat: Using cached qmassa sample for $pciId after qmassa execution failure");
+                $this->debugLog("Using cached qmassa sample for $pciId after qmassa execution failure");
                 return json_encode([$cachedSample, $cachedSample], JSON_PRETTY_PRINT);
             }
             return $this->buildXEJSON($pciId);
@@ -1376,13 +1376,13 @@ class Intel extends Main
         // Keep raw qmassa output for debugging (not deleting temp file)
         
         // Debug: log line count
-        error_log("gpustat: qmassa output has " . count($qmassaLines) . " lines");
+        $this->debugLog("qmassa output has " . count($qmassaLines) . " lines");
         
         if (empty($qmassaLines) || count($qmassaLines) < 3) {
-            error_log("gpustat: qmassa returned insufficient output for $pciId (expected at least 3 lines, got " . count($qmassaLines) . ")");
+            $this->debugLog("qmassa returned insufficient output for $pciId (expected at least 3 lines, got " . count($qmassaLines) . ")");
             $cachedSample = $this->getCachedQmassaSample($pciId);
             if ($cachedSample !== null) {
-                error_log("gpustat: Using cached qmassa sample for $pciId after insufficient qmassa output");
+                $this->debugLog("Using cached qmassa sample for $pciId after insufficient qmassa output");
                 return json_encode([$cachedSample, $cachedSample], JSON_PRETTY_PRINT);
             }
             return $this->buildXEJSON($pciId);
@@ -1415,7 +1415,7 @@ class Intel extends Main
             
             // Debug: log device data structure
             $clientCount = isset($deviceData['clis_stats']) ? count($deviceData['clis_stats']) : 0;
-            error_log("gpustat: Device $pciId has $clientCount clients in qmassa output");
+            $this->debugLog("Device $pciId has $clientCount clients in qmassa output");
             
             // Transform qmassa output to intel_gpu_top compatible format
             $jsonOutput = $this->transformQmassaToIntelFormat($deviceData, $pciId);
@@ -1425,7 +1425,7 @@ class Intel extends Main
                 $cachedSample = $this->getCachedQmassaSample($pciId);
                 if ($cachedSample !== null && isset($cachedSample['clients']) && is_array($cachedSample['clients']) && !empty($cachedSample['clients'])) {
                     $jsonOutput['clients'] = $cachedSample['clients'];
-                    error_log("gpustat: Reused cached qmassa clients for $pciId due to empty client sample");
+                    $this->debugLog("Reused cached qmassa clients for $pciId due to empty client sample");
                 }
             }
 
@@ -1435,7 +1435,7 @@ class Intel extends Main
                 $cachedSample = $this->getCachedQmassaSample($pciId);
                 if ($cachedSample !== null) {
                     $jsonOutput = $cachedSample;
-                    error_log("gpustat: Using cached qmassa sample for $pciId due to transient zero sample");
+                    $this->debugLog("Using cached qmassa sample for $pciId due to transient zero sample");
                 }
             } else {
                 $this->setCachedQmassaSample($pciId, $jsonOutput);
@@ -1452,10 +1452,10 @@ class Intel extends Main
             return $return;
             
         } catch (JsonException $e) {
-            error_log("gpustat: Failed to parse qmassa JSON for $pciId: " . $e->getMessage());
+            $this->debugLog("Failed to parse qmassa JSON for $pciId: " . $e->getMessage());
             $cachedSample = $this->getCachedQmassaSample($pciId);
             if ($cachedSample !== null) {
-                error_log("gpustat: Using cached qmassa sample for $pciId after parse failure");
+                $this->debugLog("Using cached qmassa sample for $pciId after parse failure");
                 return json_encode([$cachedSample, $cachedSample], JSON_PRETTY_PRINT);
             }
             return $this->buildXEJSON($pciId);
@@ -1640,7 +1640,7 @@ class Intel extends Main
         // Map DRM clients from clis_stats
         if (isset($qmassaData['clis_stats']) && is_array($qmassaData['clis_stats'])) {
             // Debug: log client count
-            error_log("gpustat: Found " . count($qmassaData['clis_stats']) . " DRM clients for $pciId");
+            $this->debugLog("Found " . count($qmassaData['clis_stats']) . " DRM clients for $pciId");
             
             foreach ($qmassaData['clis_stats'] as $client) {
                 $clientName = $client['comm'] ?? ($client['command'] ?? 'unknown');
@@ -1660,7 +1660,7 @@ class Intel extends Main
                 ];
                 
                 // Debug: log client details
-                error_log("gpustat: Client {$clientEntry['name']} (PID {$clientEntry['pid']})");
+                $this->debugLog("Client {$clientEntry['name']} (PID {$clientEntry['pid']})");
                 
                 // Map client engine usage
                 if (isset($client['eng_usage']) && is_array($client['eng_usage'])) {
@@ -1694,12 +1694,12 @@ class Intel extends Main
             }
             if (!empty($fdinfoUsage['clients'])) {
                 $output['clients'] = $fdinfoUsage['clients'];
-                error_log("gpustat: Found " . count($output['clients']) . " clients from fdinfo fallback");
+                $this->debugLog("Found " . count($output['clients']) . " clients from fdinfo fallback");
             }
         }
 
         if (empty($output['clients'])) {
-            error_log("gpustat: qmassa returned no clients, falling back to sysfs for client detection");
+            $this->debugLog("qmassa returned no clients, falling back to sysfs for client detection");
             $clientsPath = "/sys/kernel/debug/dri/$pciId/clients";
             if (file_exists($clientsPath)) {
                 $lines = file($clientsPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
@@ -1723,7 +1723,7 @@ class Intel extends Main
                             ];
                         }
                     }
-                    error_log("gpustat: Found " . count($output['clients']) . " clients from sysfs fallback");
+                    $this->debugLog("Found " . count($output['clients']) . " clients from sysfs fallback");
                 }
             }
         }
@@ -1732,7 +1732,7 @@ class Intel extends Main
         // For now, leave at 0 as the actual calculation would need historical data
         
         // Debug: log final client count
-        error_log("gpustat: Transformed data has " . count($output['clients']) . " clients");
+        $this->debugLog("Transformed data has " . count($output['clients']) . " clients");
         
         return $output;
     }
