@@ -49,6 +49,10 @@
 -->
 
 <CHANGES>
+###2026.05.16
+
+- Add debug stting.
+
 ###2026.05.11
 
 - Add frequency of GPU
