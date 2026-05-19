@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "gpustat">
 <!ENTITY author    "SimonFair">
-<!ENTITY version   "2026.05.16">
+<!ENTITY version   "2026.05.19">
 <!ENTITY launch    "Settings/GPUStatSettings">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/SimonFair/&name;-unraid/master">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
@@ -49,6 +49,11 @@
 -->
 
 <CHANGES>
+###2026.05.19
+
+- Fix Nvidia max power to use current_power_limit as an option if power_limit is not found
+  Thanks to artur-ag for the PR.
+
 ###2026.05.16
 
 - Add debug stting.
