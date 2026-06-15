@@ -28,6 +28,10 @@ namespace gpustat\lib;
 
 /** @noinspection PhpIncludeInspection */
 require_once('/usr/local/emhttp/plugins/dynamix/include/Wrappers.php');
+if (is_file('/usr/local/emhttp/plugins/dynamix/include/SriovHelpers.php')) {
+    /** @noinspection PhpIncludeInspection */
+    require_once('/usr/local/emhttp/plugins/dynamix/include/SriovHelpers.php');
+}
 
 /**
  * Class Main
@@ -729,9 +733,48 @@ class Main
         return $cgroup;
     }
 
+    protected function getDockerIdFromControlGroup(string $controlGroup): ?string
+    {
+        if ($controlGroup === '') {
+            return null;
+        }
+
+        // Matches both cgroup v1 and v2 styles, e.g.:
+        // .../docker/<id>
+        // .../docker-<id>.scope
+        if (preg_match('/(?:^|\/)docker\/?([a-f0-9]{12,64})(?:$|\n|\/)/mi', $controlGroup, $m)) {
+            return strtolower($m[1]);
+        }
+        if (preg_match('/(?:^|\/)docker-([a-f0-9]{12,64})\.scope(?:$|\n|\/)/mi', $controlGroup, $m)) {
+            return strtolower($m[1]);
+        }
+
+        return null;
+    }
+
     protected function isDebugLoggingEnabled(): bool
     {
         $value = $this->settings['DEBUGLOG'] ?? 0;
+
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return (int)$value !== 0;
+        }
+
+        if (is_string($value)) {
+            $normalized = strtolower(trim($value));
+            return in_array($normalized, ['1', 'true', 'yes', 'on'], true);
+        }
+
+        return false;
+    }
+
+    protected function isSettingEnabled(string $key): bool
+    {
+        $value = $this->settings[$key] ?? 0;
 
         if (is_bool($value)) {
             return $value;
@@ -787,24 +830,49 @@ class Main
      *
      * @param array $process
      */
-    protected function detectApplication (array $process)
+    protected function detectApplication (array $process, string $listKey = 'active_apps')
     {
-        $dockerInfo = null;
-        $controlGroup = $this->getControlGroup((int) $process['pid']);
-        $usedMemory = (int) $this->stripText(' MiB', $process['memory'] ?? '');
+        $pid = isset($process['pid']) ? (int)$process['pid'] : 0;
+        $processName = isset($process['name']) ? (string)$process['name'] : 'unknown';
+        if ($this->isIgnoredGpuProcess($processName)) {
+            return;
+        }
 
-        if ($controlGroup && preg_match('/docker\/([a-z0-9]+)$/', $controlGroup, $matches)) {
-            $dockerInfo = $this->getDockerContainerInspect($matches[1]);
+        if ($pid <= 0 || !is_dir("/proc/$pid")) {
+            if ($this->isDebugLoggingEnabled()) {
+                $this->debugLog("skipping stale GPU process pid=" . $pid);
+            }
+            return;
+        }
+
+        $dockerInfo = null;
+        $controlGroup = $this->getControlGroup($pid);
+        $usedMemory = (int) $this->stripText(' MiB', $process['memory'] ?? '');
+        $dockerId = $this->getDockerIdFromControlGroup($controlGroup);
+
+        if ($this->isDebugLoggingEnabled()) {
+            $this->debugLog("detectApplication pid=" . $pid . " name=" . $processName . " dockerId=" . ($dockerId ?? 'none'));
+            if ($dockerId === null && $controlGroup !== '') {
+                $this->debugLog("cgroup for pid " . $pid . ": " . str_replace("\n", ' | ', $controlGroup));
+            }
+        }
+
+        if ($dockerId !== null) {
+            $dockerInfo = $this->getDockerContainerInspect($dockerId);
+            if ($this->isDebugLoggingEnabled()) {
+                $this->debugLog("docker inspect lookup id=" . $dockerId . " result=" . (!empty($dockerInfo) ? 'hit' : 'miss'));
+            }
         }
 
         if (!$controlGroup || !$dockerInfo) {
             if ($this->isDebugLoggingEnabled()) {
                 file_put_contents('/tmp/hostapps', json_encode($this->hostapps));
             }
-            if (isset($this->hostapps[strtolower($process['name'])])) $icon = $this->hostapps[strtolower($process['name'])]; else $icon=Self::DOCKER_ICON_DEFAULT_PATH;
+            $hostIcon = $this->hostapps[strtolower($processName)] ?? self::DOCKER_ICON_DEFAULT_PATH;
+            $icon = is_array($hostIcon) ? reset($hostIcon) : $hostIcon;
             $active_app = [
-                'name' => (string) $process['name'],
-                'title' => (string) $process['name'],
+                'name' => $processName,
+                'title' => $processName,
                 'icon' => $icon,
                 'mem' => $usedMemory,
                 'count' => 1,
@@ -819,14 +887,228 @@ class Main
             ];
         }
 
-        $index = array_search($active_app['name'], array_column($this->pageData['active_apps'], 'name'));
+        if (!isset($this->pageData[$listKey]) || !is_array($this->pageData[$listKey])) {
+            $this->pageData[$listKey] = [];
+        }
+
+        $index = array_search($active_app['name'], array_column($this->pageData[$listKey], 'name'));
 
         if ($index === false) {
-            $this->pageData['active_apps'][] = $active_app;
+            $this->pageData[$listKey][] = $active_app;
         } else {
-            $this->pageData['active_apps'][$index]['mem'] += $usedMemory;
-            $this->pageData['active_apps'][$index]['count']++;
+            $this->pageData[$listKey][$index]['mem'] += $usedMemory;
+            $this->pageData[$listKey][$index]['count']++;
         }
+    }
+
+    protected function addActiveApp(string $name, string $title, string $icon, int $memory = 0, string $listKey = 'active_apps'): void
+    {
+        if (!isset($this->pageData[$listKey]) || !is_array($this->pageData[$listKey])) {
+            $this->pageData[$listKey] = [];
+        }
+
+        $active_app = [
+            'name' => $name,
+            'title' => $title,
+            'icon' => $icon !== '' ? $icon : self::DOCKER_ICON_DEFAULT_PATH,
+            'mem' => $memory,
+            'count' => 1,
+        ];
+
+        $index = array_search($active_app['name'], array_column($this->pageData[$listKey], 'name'));
+        if ($index === false) {
+            $this->pageData[$listKey][] = $active_app;
+        } else {
+            $this->pageData[$listKey][$index]['mem'] += $memory;
+            $this->pageData[$listKey][$index]['count']++;
+        }
+    }
+
+    protected function addSRIOVVFProcesses(string $pfPciid): void
+    {
+        if (!$this->isSettingEnabled('DISPVFPROCESSES')) {
+            return;
+        }
+
+        $this->pageData['vf_apps'] = [];
+        $this->pageData['has_vfs'] = '0';
+
+        $vfPciids = $this->getSRIOVVFPciIds($pfPciid);
+        if (empty($vfPciids)) {
+            return;
+        }
+        $this->pageData['has_vfs'] = '1';
+
+        $vfLookup = [];
+        foreach ($vfPciids as $vfPciid) {
+            $vfLookup[strtolower($vfPciid)] = true;
+            $vfLookup[strtolower(preg_replace('/^[0-9a-f]{4}:/i', '', $vfPciid))] = true;
+        }
+
+        $processes = [];
+        foreach ($vfPciids as $vfPciid) {
+            foreach ($this->getGpuClientsFromDebugfs($vfPciid) as $process) {
+                $processes[(int)$process['pid']] = $process;
+            }
+        }
+
+        $procDirs = glob('/proc/[0-9]*', GLOB_NOSORT) ?: [];
+        foreach ($procDirs as $procDir) {
+            $pid = (int)basename($procDir);
+            if ($pid <= 0) {
+                continue;
+            }
+
+            $fdinfoFiles = glob("$procDir/fdinfo/[0-9]*", GLOB_NOSORT) ?: [];
+            foreach ($fdinfoFiles as $fdinfoFile) {
+                $content = @file_get_contents($fdinfoFile);
+                if ($content === false || $content === '') {
+                    continue;
+                }
+
+                if (!preg_match('/^drm-pdev:\s*([0-9a-f:.]+)/mi', $content, $matches)) {
+                    continue;
+                }
+
+                $pdev = strtolower($matches[1]);
+                if (!isset($vfLookup[$pdev])) {
+                    continue;
+                }
+
+                $memory = $this->getFdinfoMemoryMiB($content);
+                if (!isset($processes[$pid])) {
+                    $processes[$pid] = [
+                        'pid' => $pid,
+                        'name' => $this->getProcessName($pid),
+                        'memory' => $memory,
+                    ];
+                } elseif ((int)($processes[$pid]['memory'] ?? 0) <= 0 && $memory > 0) {
+                    $processes[$pid]['memory'] = $memory;
+                }
+                break;
+            }
+        }
+
+        foreach ($processes as $process) {
+            $this->detectApplication($process, 'vf_apps');
+        }
+
+        if (!empty($processes)) {
+            $this->pageData['sessions'] = (int)($this->pageData['sessions'] ?? 0) + count($processes);
+        }
+    }
+
+    protected function getSRIOVVFPciIds(string $pfPciid): array
+    {
+        $pfPciid = strpos($pfPciid, '0000:') === 0 ? $pfPciid : "0000:$pfPciid";
+        if (function_exists('getSriovInfoJson')) {
+            $sriov = json_decode(\getSriovInfoJson(true), true);
+            if (is_array($sriov) && isset($sriov[$pfPciid]['vfs']) && is_array($sriov[$pfPciid]['vfs'])) {
+                $helperVfs = [];
+                foreach ($sriov[$pfPciid]['vfs'] as $vf) {
+                    if (isset($vf['pci']) && is_string($vf['pci'])) {
+                        $helperVfs[] = $vf['pci'];
+                    }
+                }
+
+                if (!empty($helperVfs)) {
+                    return array_values(array_unique($helperVfs));
+                }
+            }
+        }
+
+        $vfLinks = glob("/sys/bus/pci/devices/$pfPciid/virtfn*", GLOB_NOSORT) ?: [];
+        $vfPciids = [];
+
+        foreach ($vfLinks as $vfLink) {
+            $realPath = realpath($vfLink);
+            if ($realPath === false) {
+                continue;
+            }
+
+            $vfPciid = basename($realPath);
+            if (preg_match('/^[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-9]$/i', $vfPciid)) {
+                $vfPciids[] = $vfPciid;
+            }
+        }
+
+        return array_values(array_unique($vfPciids));
+    }
+
+    protected function getGpuClientsFromDebugfs(string $pciid): array
+    {
+        $clientsPath = "/sys/kernel/debug/dri/$pciid/clients";
+        if (!is_file($clientsPath)) {
+            return [];
+        }
+
+        $lines = file($clientsPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if (!$lines || count($lines) < 2) {
+            return [];
+        }
+
+        array_shift($lines);
+        $clients = [];
+        foreach ($lines as $line) {
+            if (!preg_match('/^\s*(.+?)\s+(\d+)\s+\d+\s+[yn]\s+[yn]\s+\d+\s+/i', $line, $matches)) {
+                continue;
+            }
+
+            $name = trim($matches[1]);
+            if ($this->isIgnoredGpuProcess($name)) {
+                continue;
+            }
+
+            $pid = (int)$matches[2];
+            if ($pid > 0) {
+                $clients[] = [
+                    'pid' => $pid,
+                    'name' => $name,
+                    'memory' => 0,
+                ];
+            }
+        }
+
+        return $clients;
+    }
+
+    protected function isIgnoredGpuProcess(?string $name): bool
+    {
+        if ($name === null) {
+            return false;
+        }
+
+        $processName = strtolower(trim($name));
+        return $processName === 'qmassa'
+            || strpos($processName, '/qmassa') !== false
+            || $processName === 'timeout';
+    }
+
+    protected function getProcessName(int $pid): string
+    {
+        $comm = @file_get_contents("/proc/$pid/comm");
+        if ($comm !== false && trim($comm) !== '') {
+            return strtolower(trim($comm));
+        }
+
+        $command = $this->getFullCommand($pid);
+        if ($command !== '') {
+            return strtolower(pathinfo(strtok($command, "\0 "), PATHINFO_BASENAME));
+        }
+
+        return 'unknown';
+    }
+
+    protected function getFdinfoMemoryMiB(string $content): int
+    {
+        $maxKiB = 0;
+        if (preg_match_all('/^drm-(?:total|resident|shared|active|mem)[^:]*:\s*([0-9]+)\s*(?:kB|KiB)?/mi', $content, $matches)) {
+            foreach ($matches[1] as $value) {
+                $maxKiB = max($maxKiB, (int)$value);
+            }
+        }
+
+        return (int)round($maxKiB / 1024);
     }
 
     /**

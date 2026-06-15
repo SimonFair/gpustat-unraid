@@ -92,6 +92,9 @@ Title="GPU Statistics"
     if (!isset($gpustat_cfg['DEBUGLOG']) || $gpustat_cfg['DEBUGLOG'] == '') {
       $gpustat_cfg['DEBUGLOG'] = '0';
     }
+    if (!isset($gpustat_cfg['DISPVFPROCESSES']) || $gpustat_cfg['DISPVFPROCESSES'] == '') {
+      $gpustat_cfg['DISPVFPROCESSES'] = '0';
+    }
     $gpustat_inventory  = true;
 
     $multi_enable=version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.12.0-beta5', '>') ;
@@ -261,6 +264,12 @@ Intel Backend (i915):
   <?=mk_option($gpustat_cfg['INTELBACKEND'], "top", "intel_gpu_top (top)");?>
   <?=mk_option($gpustat_cfg['INTELBACKEND'], "top_qmassa", "intel_gpu_top + qmassa");?>
     <?=mk_option($gpustat_cfg['INTELBACKEND'], "qmassa", "qmassa only");?>
+  </select>
+
+VF Processes:
+: <select id="DISPVFPROCESSES" name="DISPVFPROCESSES" size="1">
+    <?=mk_option($gpustat_cfg['DISPVFPROCESSES'], "0", "No");?>
+    <?=mk_option($gpustat_cfg['DISPVFPROCESSES'], "1", "Yes");?>
   </select>
 
 3D Render Load:

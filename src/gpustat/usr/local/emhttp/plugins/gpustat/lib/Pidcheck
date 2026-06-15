@@ -1,41 +1,147 @@
-<?PHP
-function getFullCommand(int $pid): string
+<?php
+
+require_once('/usr/local/emhttp/plugins/gpustat/lib/Main.php');
+
+use gpustat\lib\Main;
+
+class PidcheckHelper extends Main
+{
+    public function __construct()
     {
-        $command = '';
-        $file = sprintf('/proc/%0d/cmdline', $pid);
-
-        if (file_exists($file)) {
-            $command = trim(@file_get_contents($file), "\0");
-        }
-
-        return $command;
-    }
-    /*
-    * Retrieves the full command of a parent process with arguments for a given process ID
-    *
-    * @param int $pid
-    * @return string
-    */
-function getParentCommand(int $pid): string
-    {
-        $command = '';
-        $pid_command = sprintf('ps j %0d | awk \'{ $1=$1 };NR>1\' | cut -d \' \' -f 1', $pid);
-        echo "$pid_command\n";
-        $ppid = (int)trim(shell_exec($pid_command) ?? 0);
-        echo "Parent PID:$ppid\n";
-        if ($ppid > 0) {
-            $command = getFullCommand($ppid);
-        }
-
-        return $command;
+        // Keep constructor checks quiet for standalone diagnostics.
+        parent::__construct([
+            'cmd' => 'cat',
+            'inventory' => true,
+        ]);
     }
 
+    public function getFullCommandPublic(int $pid): string
+    {
+        return $this->getFullCommand($pid);
+    }
 
-$pid = $argv[1];
-echo "PID is:$pid\n";
-echo "PID Info\n";
-echo getFullCommand($pid);
-echo "\nParent for PID Info\n";
-echo getParentCommand($pid)."\n";
-?>
+    public function getControlGroupPublic(int $pid): string
+    {
+        return $this->getControlGroup($pid);
+    }
+
+    public function getDockerIdFromControlGroupPublic(string $controlGroup): ?string
+    {
+        // Keep this parser local so Pidcheck does not depend on unreleased Main methods.
+        if ($controlGroup === '') {
+            return null;
+        }
+        if (preg_match('/(?:^|\/)docker\/?([a-f0-9]{12,64})(?:$|\n|\/)/mi', $controlGroup, $m)) {
+            return strtolower($m[1]);
+        }
+        if (preg_match('/(?:^|\/)docker-([a-f0-9]{12,64})\.scope(?:$|\n|\/)/mi', $controlGroup, $m)) {
+            return strtolower($m[1]);
+        }
+
+        return null;
+    }
+
+    public function getDockerContainerInspectPublic(string $id): array
+    {
+        return $this->getDockerContainerInspect($id);
+    }
+
+    public function getDefaultIconPathPublic(): string
+    {
+        return self::DOCKER_ICON_DEFAULT_PATH;
+    }
+}
+
+function getPidList(): array
+{
+    $procDirs = glob('/proc/[0-9]*', GLOB_NOSORT) ?: [];
+    $pids = [];
+
+    foreach ($procDirs as $procDir) {
+        $pid = (int)basename($procDir);
+        if ($pid > 0) {
+            $pids[] = $pid;
+        }
+    }
+
+    sort($pids, SORT_NUMERIC);
+    return $pids;
+}
+
+function normalizeForOutput(string $value): string
+{
+    return str_replace(["\n", "\t"], [' | ', ' '], trim($value));
+}
+
+function isGpuProcess(int $pid): bool
+{
+    $fdinfoFiles = glob("/proc/$pid/fdinfo/[0-9]*", GLOB_NOSORT) ?: [];
+    foreach ($fdinfoFiles as $fdinfo) {
+        $content = @file_get_contents($fdinfo);
+        if ($content === false || $content === '') {
+            continue;
+        }
+
+        // DRM fdinfo entries exist only for GPU-related DRM file descriptors.
+        if (preg_match('/^drm-(client-id|pdev|driver|engine-|total-|cycles-|mem-|resident-)/mi', $content)) {
+            return true;
+        }
+    }
+
+    // Fallback for non-DRM stacks (e.g. NVIDIA device nodes).
+    $fdFiles = glob("/proc/$pid/fd/[0-9]*", GLOB_NOSORT) ?: [];
+    foreach ($fdFiles as $fdPath) {
+        $target = @readlink($fdPath);
+        if ($target === false || $target === '') {
+            continue;
+        }
+
+        if (strpos($target, '/dev/dri/') === 0 || strpos($target, '/dev/nvidia') === 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+$helper = new PidcheckHelper();
+$pids = getPidList();
+
+$result = [];
+foreach ($pids as $pid) {
+    if (!isGpuProcess($pid)) {
+        continue;
+    }
+
+    $command = $helper->getFullCommandPublic($pid);
+    $controlGroup = $helper->getControlGroupPublic($pid);
+    $dockerId = $helper->getDockerIdFromControlGroupPublic($controlGroup);
+
+    $dockerName = null;
+    $dockerTitle = null;
+    $icon = $helper->getDefaultIconPathPublic();
+
+    if ($dockerId !== null) {
+        $dockerInfo = $helper->getDockerContainerInspectPublic($dockerId);
+        if (!empty($dockerInfo)) {
+            $dockerName = isset($dockerInfo['name']) ? (string)$dockerInfo['name'] : null;
+            $dockerTitle = isset($dockerInfo['title']) ? (string)$dockerInfo['title'] : null;
+            if (isset($dockerInfo['icon']) && is_string($dockerInfo['icon']) && $dockerInfo['icon'] !== '') {
+                $icon = $dockerInfo['icon'];
+            }
+        }
+    }
+
+    $result[] = [
+        'pid' => $pid,
+        'command' => $command,
+        'cgroup' => normalizeForOutput($controlGroup),
+        'docker_id' => $dockerId,
+        'docker_name' => $dockerName,
+        'docker_title' => $dockerTitle,
+        'icon' => $icon,
+    ];
+}
+
+echo json_encode($result, JSON_PRETTY_PRINT) . PHP_EOL;
     

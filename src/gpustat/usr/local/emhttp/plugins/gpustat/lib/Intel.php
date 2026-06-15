@@ -266,6 +266,19 @@ class Intel extends Main
         ]));
     }
 
+    private function filterLiveQmassaClients(array $clients): array
+    {
+        $live = [];
+        foreach ($clients as $client) {
+            $pid = isset($client['pid']) ? (int)$client['pid'] : 0;
+            if ($pid > 0 && is_dir("/proc/$pid")) {
+                $live[] = $client;
+            }
+        }
+
+        return $live;
+    }
+
     private function isLikelyTransientZeroSample(array $sample): bool
     {
         $gpuPower = isset($sample['power']['GPU']) && is_numeric($sample['power']['GPU']) ? (float)$sample['power']['GPU'] : 0.0;
@@ -1056,16 +1069,17 @@ class Intel extends Main
                 }
             }
             if ($this->settings['DISPSESSIONS']) {
-            $this->pageData['active_apps'] = [];
+                $this->pageData['active_apps'] = [];
+                $this->pageData['sessions'] = 0;
                 if (isset($data['clients']) && count($data['clients']) > 0) {
-                    $this->pageData['sessions'] = count($data['clients']);
-                    if ($this->pageData['sessions'] > 0) {
+                    if (count($data['clients']) > 0) {
                         $clientRender = $clientBlitter = $clientVideo = $clientVideoEnh = $clientCompute = 0 ;
                         foreach ($data['clients'] as $id => $process) {
                             if (isset($process["name"])) {
                                 if ($this->isExcludedClientProcess($process["name"])) {
                                     continue;
                                 }
+                                $this->pageData['sessions']++;
                                 $process_array = [
                                     "pid" => $process["pid"],
                                     "name" => $process["name"],
@@ -1096,6 +1110,8 @@ class Intel extends Main
 
             $maxload = (max($max3drenderchk ,$maxblitterchk, $maxvideochk, $maxvidenhchk, $maxcomputechk));
             $this->pageData['util'] = $maxload.'%';
+
+            $this->addSRIOVVFProcesses($this->settings['GPUID']);
             
             $this->getPCIeBandwidth($this->settings['GPUID']);
         } else {
@@ -1420,12 +1436,15 @@ class Intel extends Main
             // Transform qmassa output to intel_gpu_top compatible format
             $jsonOutput = $this->transformQmassaToIntelFormat($deviceData, $pciId);
 
-            // qmassa can intermittently emit empty client lists on XE; preserve recent clients/icons.
+            // qmassa can intermittently emit empty client lists on XE; preserve only clients whose PIDs still exist.
             if (empty($jsonOutput['clients'])) {
                 $cachedSample = $this->getCachedQmassaSample($pciId);
                 if ($cachedSample !== null && isset($cachedSample['clients']) && is_array($cachedSample['clients']) && !empty($cachedSample['clients'])) {
-                    $jsonOutput['clients'] = $cachedSample['clients'];
-                    $this->debugLog("Reused cached qmassa clients for $pciId due to empty client sample");
+                    $liveClients = $this->filterLiveQmassaClients($cachedSample['clients']);
+                    if (!empty($liveClients)) {
+                        $jsonOutput['clients'] = $liveClients;
+                        $this->debugLog("Reused live cached qmassa clients for $pciId due to empty client sample");
+                    }
                 }
             }
 
