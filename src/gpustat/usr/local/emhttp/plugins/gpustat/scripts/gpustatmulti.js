@@ -173,6 +173,7 @@ const gpustat_statusm = (input) => {
                         }
                         
                 $.each(data, function (key, data) {
+                    if (key == "name" || key == "real_name") return;
                     if (key == "error") {   
                         toggleVFIO(true,panel,false) ;
                         var error_text = data[0]["message"] ;
@@ -181,10 +182,16 @@ const gpustat_statusm = (input) => {
                     $('.gpu-'+key+panel).html(data);
                     })
 
+                const displayName = data["name"] ?? "";
+                const realName = data["real_name"] ?? displayName;
+                $('.gpu-name'+panel).text(displayName).attr('title', realName);
+
 
             } else {
                 toggleVFIO(true,panel,data["vfiovm"]) ;
-                $('.gpu-name'+panel).html(data["name"]);
+                const displayName = data["name"] ?? "";
+                const realName = data["real_name"] ?? displayName;
+                $('.gpu-name'+panel).text(displayName).attr('title', realName);
                 $('.gpu-vendor'+panel).html(data["vendor"]);
                 $('.gpu-driver'+panel).html(data["driver"]);
                 $('.gpu-pciegen'+panel).html(data["pciegen"]);
