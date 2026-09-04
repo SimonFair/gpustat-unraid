@@ -10,6 +10,7 @@
 <!ENTITY plgPATH   "/boot/config/plugins/&name;">
 <!ENTITY plgNAME   "&name;-&version;-x86_64">
 <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
+<!ENTITY sha256 "2027ce1035189bbff84d9d5e667e1c92a615987d7afb86bfc860b9351d159aa4">
 ]>
 
 <PLUGIN
@@ -445,6 +446,7 @@ fi
  <!-- The 'source' file. -->
  <FILE Name="&plgPATH;/&plgNAME;.txz" Min="6.4" Run="upgradepkg --install-new">
   <URL>&pkgURL;/&plgNAME;.txz</URL>
+  <SHA256>&sha256;</SHA256>
  </FILE>
 
  <!-- Install default plugin cfg  -->
