@@ -43,7 +43,7 @@ function toggleVFIO(vfio,panel,vfiovm) {
   }
 
 const gpustat_statusm = (input) => {
-    $.getJSON('/plugins/gpustat/gpustatusmulti.php?gpus='+JSON.stringify(input), (data2) => {
+    $.getJSON('/plugins/gpustat/gpustatusmulti.php?gpus='+encodeURIComponent(JSON.stringify(input)), (data2) => {
         if (data2) {
         $.each(data2, function (key2, data) {
             panel = data["panel"] ;
