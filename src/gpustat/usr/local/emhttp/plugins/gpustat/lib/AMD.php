@@ -315,8 +315,18 @@ class AMD extends Main
                 array_shift($lines); // Remove the header row
     
                 foreach ($lines as $line) {
-                    $columns = preg_split('/\s+/', trim($line));
-                    if (count($columns) >= 6) {
+                    if (preg_match('/^\s*(.*?)\s+(\d+)\s+(\d+)\s+([yn])\s+([yn])\s+(\d+)/', $line, $matches)) {
+                        $command = $matches[1];
+                        $tgid = $matches[2];
+                        $clients[$tgid] = [
+                            "name" => $command,
+                            "pid" => $tgid,
+                            "gpu_instance_id" => "N/A",
+                            "compute_instance_id" => "N/A",
+                            "type" => "C",
+                            "used_memory" => "N/A"
+                        ];
+                    } elseif (count($columns = preg_split('/\s+/', trim($line))) >= 6) {
                         list($command, $tgid, $dev, $master, $a, $uid) = $columns;
                         $clients[$tgid] = [
                             "name" => $command,
