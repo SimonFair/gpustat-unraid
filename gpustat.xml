@@ -21,6 +21,6 @@
     <MinVer>6.7.1</MinVer>
     <Project>https://github.com/b3rs3rk/gpustat-unraid</Project>
     <Support>https://forums.unraid.net/topic/89453-plugin-gpu-statistics/</Support>
-    <Icon>https://raw.githubusercontent.com/b3rs3rk/gpustat-unraid/master/src/gpustat/usr/local/emhttp/plugins/gpustat/images/gpustat.png</Icon>
+    <Icon>https://raw.githubusercontent.com/SimonFair/gpustat-unraid/master/src/gpustat/usr/local/emhttp/plugins/gpustat/icons/gpustat.png</Icon>
     <License>MIT License - Copyright 2020-2021 b3rs3rk</License>
 </Containers>
