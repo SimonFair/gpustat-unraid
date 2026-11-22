@@ -127,7 +127,7 @@ const gpustat_statusm = (input) => {
                             'texture', 'shaderexp', 'sequencer',
                             'shaderinter', 'scancon', 'primassem',
                             'depthblk', 'colorblk', 'memutil',
-                            'gfxtrans', 'memclockutil', 'clockutil'
+                            'gfxtrans', 'memclockutil', 'clockutil', 'vcnutil'
                         ];
                         amdbars.forEach(function (metric) {
                             $('.gpu-'+metric+'bar'+panel).removeAttr('style').css('width', data[metric]);

@@ -305,6 +305,16 @@ class AMD extends Main
         }
         $this->pageData = array_merge($this->pageData, $this->getSensorData());
 
+        // Cards with a VCN video engine (RDNA and newer) report no uvd/vce in
+        // radeontop, so hardware decode and encode show as an idle card. The
+        // kernel publishes the engine's load in sysfs.
+        if ($this->settings['DISPENCDEC']) {
+            $vcn = @file_get_contents("/sys/bus/pci/devices/0000:{$this->settings['PCIID']}/vcn_busy_percent");
+            if ($vcn !== false && is_numeric(trim($vcn))) {
+                $this->pageData['vcnutil'] = (int) trim($vcn) . '%';
+            }
+        }
+
         if ($this->settings['DISPSESSIONS']) {
             $this->pageData['active_apps'] = [];
             $clientsPath = "/sys/kernel/debug/dri/0000:{$this->settings['PCIID']}/clients";
