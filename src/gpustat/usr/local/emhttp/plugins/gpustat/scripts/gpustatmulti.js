@@ -132,12 +132,8 @@ const gpustat_statusm = (input) => {
                         amdbars.forEach(function (metric) {
                             $('.gpu-'+metric+'bar'+panel).removeAttr('style').css('width', data[metric]);
                         });
-                        // Colour the video engine like the dashboard's CPU bars, so a busy
-                        // engine does not read as an empty grey bar.
-                        if (data['vcnutil'] !== undefined) {
-                            const vcn = parseInt(data['vcnutil']);
-                            $('.gpu-vcnutilbar'+panel).removeClass('greenbar orangebar redbar')
-                                .addClass(vcn >= 90 ? 'redbar' : vcn >= 70 ? 'orangebar' : 'greenbar');
+                        if (data['vcnutil'] === 'N/A') {
+                            $('.gpu-vcnutilbar'+panel).css('width', '0%');
                         }
                         break;
                 }

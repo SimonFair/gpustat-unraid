@@ -309,10 +309,9 @@ class AMD extends Main
         // radeontop, so hardware decode and encode show as an idle card. The
         // kernel publishes the engine's load in sysfs.
         if ($this->settings['DISPENCDEC']) {
+            // Always sent, so an unreadable sample replaces the last value with N/A.
             $vcn = @file_get_contents("/sys/bus/pci/devices/0000:{$this->settings['PCIID']}/vcn_busy_percent");
-            if ($vcn !== false && is_numeric(trim($vcn))) {
-                $this->pageData['vcnutil'] = (int) trim($vcn) . '%';
-            }
+            $this->pageData['vcnutil'] = ($vcn !== false && is_numeric(trim($vcn))) ? (int) trim($vcn) . '%' : 'N/A';
         }
 
         if ($this->settings['DISPSESSIONS']) {
