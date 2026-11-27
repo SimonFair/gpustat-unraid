@@ -283,14 +283,14 @@ $gpu_nv = $gpu_intel = $gpu_amd = $gpu_unknown = false;
       // AMD GPUs 
 
     if ($gpu_amd) {
-        $page_render .="<tr class='vfio_notinuse$count'><td colspan ='2' ><span class='w36'><i class='ups fa fa-fw icon-hardware'></i>_(GPU Load)_</span>" ;
-        $page_render .="<span class='w44'><span class='gpu-util$count load'>0%</span><div class='usage-disk sys'><span class='gpu-utilbar$count' id='gpu-utilbar$count'></span><span></span></div></span></td></tr>" ;
-
+        $page_render .="<tr class='vfio_notinuse$count'><td colspan ='2' ><span class='w36'><i class='ups fa fa-fw icon-hardware'></i>" ;
+        $page_render .= $gpustat_cfg['DISPENCDEC'] ? '_(Load - Video (VCN))_' : '_(GPU Load)_';
+        $page_render .= "</span><span class='".($gpustat_cfg['DISPENCDEC'] ? 'w26' : 'w44')."'><span class='gpu-util$count load'>0%</span><div class='usage-disk sys'><span class='gpu-utilbar$count' id='gpu-utilbar$count'></span><span></span></div></span>" ;
         if($gpustat_cfg['DISPENCDEC']) {
-            $page_render .="<tr class='vfio_notinuse$count'><td colspan ='2' ><span class='w36'><i class='ups fa fa-fw icon-hardware'></i>_(Video Engine (VCN))_</span>" ;
-            $page_render .="<span class='w44'><span class='gpu-vcnutil$count load'>N/A</span><div class='usage-disk sys'><span class='gpu-vcnutilbar$count' id='gpu-vcnutilbar$count'></span><span></span></div></span></td></tr>" ;
+            $page_render .="<span class='w26'><span class='gpu-vcnutil$count load'>N/A</span><div class='usage-disk sys'><span class='gpu-vcnutilbar$count' id='gpu-vcnutilbar$count'></span><span></span></div></span>" ;
         }
-            
+        $page_render .= "</td></tr>" ;
+
         if($gpustat_cfg['DISPGFXTRANS'] || $gpustat_cfg['DISPMEMUTIL']) {
             $page_render .= "<tr class='vfio_notinuse$count'><td colspan ='2'><span class='w36'><i class='ups fa fa-fw icon-ram'></i>_(Translate - Memory (MB))_</span>" ;
             if($gpustat_cfg['DISPGFXTRANS']) {
