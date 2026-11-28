@@ -1219,23 +1219,27 @@ class Intel extends Main
             array_shift($lines); // Remove the header row
             if ($lines) {
                 foreach ($lines as $line) {
-                    $columns = preg_split('/\s+/', trim($line));
-                    if (count($columns) >= 6) {
+                    if (preg_match('/^\s*(.*?)\s+(\d+)\s+(\d+)\s+([yn])\s+([yn])\s+(\d+)/', $line, $matches)) {
+                        $command = $matches[1];
+                        $tgid = $matches[2];
+                    } elseif (count($columns = preg_split('/\s+/', trim($line))) >= 6) {
                         list($command, $tgid, $dev, $master, $a, $uid) = $columns;
-                        if ($this->isExcludedClientProcess($command)) {
-                            continue;
-                        }
-                        $totalmem['system']['total']= 0;
-                        $clients[$tgid] = [
-                            "name" => $command,
-                            "pid" => $tgid,
-                            "gpu_instance_id" => "N/A",
-                            "compute_instance_id" => "N/A",
-                            "type" => "C",
-                            "used_memory" => "N/A",
-                            "memory" => $totalmem
-                        ];
+                    } else {
+                        continue;
                     }
+                    if ($this->isExcludedClientProcess($command)) {
+                        continue;
+                    }
+                    $totalmem['system']['total']= 0;
+                    $clients[$tgid] = [
+                        "name" => $command,
+                        "pid" => $tgid,
+                        "gpu_instance_id" => "N/A",
+                        "compute_instance_id" => "N/A",
+                        "type" => "C",
+                        "used_memory" => "N/A",
+                        "memory" => $totalmem
+                    ];
                 }
             } else $clients = null;
         }
@@ -1706,22 +1710,28 @@ class Intel extends Main
                 if ($lines && count($lines) > 1) {
                     array_shift($lines); // Remove header
                     foreach ($lines as $line) {
-                        $columns = preg_split('/\s+/', trim($line));
-                        if (count($columns) >= 2) {
-                            if ($this->isExcludedClientProcess($columns[0])) {
-                                continue;
-                            }
-                            $output['clients'][] = [
-                                "name" => $columns[0],
-                                "pid" => $columns[1],
-                                "memory" => [
-                                    "system" => [
-                                        "total" => 0
-                                    ]
-                                ],
-                                "engine-classes" => []
-                            ];
+                        if (preg_match('/^\s*(.*?)\s+(\d+)\s+(\d+)\s+([yn])\s+([yn])\s+(\d+)/', $line, $matches)) {
+                            $command = $matches[1];
+                            $tgid = $matches[2];
+                        } elseif (count($columns = preg_split('/\s+/', trim($line))) >= 2) {
+                            $command = $columns[0];
+                            $tgid = $columns[1];
+                        } else {
+                            continue;
                         }
+                        if ($this->isExcludedClientProcess($command)) {
+                            continue;
+                        }
+                        $output['clients'][] = [
+                            "name" => $command,
+                            "pid" => $tgid,
+                            "memory" => [
+                                "system" => [
+                                    "total" => 0
+                                ]
+                            ],
+                            "engine-classes" => []
+                        ];
                     }
                     $this->debugLog("Found " . count($output['clients']) . " clients from sysfs fallback");
                 }

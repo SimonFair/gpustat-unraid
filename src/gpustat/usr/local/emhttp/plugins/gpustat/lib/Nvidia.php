@@ -556,19 +556,23 @@ class Nvidia extends Main
             array_shift($lines); // Remove the header row
             $tgidold = '';
             foreach ($lines as $line) {
-                $columns = preg_split('/\s+/', trim($line));
-                if (count($columns) >= 6) {
+                if (preg_match('/^\s*(.*?)\s+(\d+)\s+(\d+)\s+([yn])\s+([yn])\s+(\d+)/', $line, $matches)) {
+                    $command = $matches[1];
+                    $tgid = $matches[2];
+                } elseif (count($columns = preg_split('/\s+/', trim($line))) >= 6) {
                     list($command, $tgid, $dev, $master, $a, $uid) = $columns;
-                    if ($tgidold == $tgid) continue;
-                    $process_info = $processes->addChild('process_info');
-                    $process_info->addChild('gpu_instance_id', "N/A");
-                    $process_info->addChild('compute_instance_id', "N/A");
-                    $process_info->addChild('pid', $tgid);
-                    $process_info->addChild('type', "C");
-                    $process_info->addChild('process_name', $command);
-                    $process_info->addChild('used_memory', "N/A");
-                    $tgidold = $tgid;
+                } else {
+                    continue;
                 }
+                if ($tgidold == $tgid) continue;
+                $process_info = $processes->addChild('process_info');
+                $process_info->addChild('gpu_instance_id', "N/A");
+                $process_info->addChild('compute_instance_id', "N/A");
+                $process_info->addChild('pid', $tgid);
+                $process_info->addChild('type', "C");
+                $process_info->addChild('process_name', $command);
+                $process_info->addChild('used_memory', "N/A");
+                $tgidold = $tgid;
             }
         }
 
