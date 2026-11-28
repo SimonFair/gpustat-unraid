@@ -842,8 +842,25 @@ class Main
         }
 
         $json = json_decode(file_get_contents(self::DOCKER_ICON_PATH));
+        $icon = $json->$name->icon ?? '';
 
-        return $json->$name->icon ?: self::DOCKER_ICON_DEFAULT_PATH;
+        if (!$icon) {
+            return self::DOCKER_ICON_DEFAULT_PATH;
+        }
+
+        // Local paths (e.g. /state/plugins/...) map through the docroot. Validate
+        // that the file exists and is a renderable image — Unraid sometimes writes
+        // a corrupt file when the label URL points to an SVG or other non-raster
+        // format it cannot convert.
+        if (str_starts_with($icon, '/')) {
+            global $docroot;
+            $localPath = ($docroot ?? '/usr/local/emhttp') . $icon;
+            if (!file_exists($localPath) || !getimagesize($localPath)) {
+                return self::DOCKER_ICON_DEFAULT_PATH;
+            }
+        }
+
+        return $icon;
     }
 
     /**
