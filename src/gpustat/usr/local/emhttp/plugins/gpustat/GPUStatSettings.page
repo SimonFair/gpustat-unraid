@@ -53,6 +53,8 @@ Title="GPU Statistics"
 
     function save_cfg($val,$gpus) {
       global $multi_enable;
+      $displayNames = isset($val['DISPLAYNAME']) && is_array($val['DISPLAYNAME']) ? $val['DISPLAYNAME'] : [];
+      unset($val['DISPLAYNAME']);
 
       if ($multi_enable) {
         $json_array = array() ;
@@ -63,6 +65,8 @@ Title="GPU Statistics"
             $json_array[$pciid]['model'] = $gpus[$gpupciid]['model'] ;
             $json_array[$pciid]['vendor'] = $gpus[$gpupciid]['vendor'] ;
             $json_array[$pciid]['guid'] = $gpus[$gpupciid]['guid'] ;
+            $displayName = trim((string)($displayNames[$pciid] ?? ''));
+            if ($displayName !== '') $json_array[$pciid]['display_name'] = $displayName;
           }
         } else {                
           $json_array[$pciid]['id'] = "None";
@@ -167,6 +171,25 @@ Unit ID for Dashboard(Multiple):
 ?>
 </select>
   <?php endif; ?>
+
+<?php if ($multi_enable && isset($gpustat_data)) : ?>
+<?php
+$currentMultiGpus = json_decode(urldecode($gpustat_cfg['MULTIGPUJSON'] ?? ''), true);
+if (!is_array($currentMultiGpus)) $currentMultiGpus = [];
+$selectedGpuIds = array_filter(explode(',', $gpustat_cfg['MULTIGPU'] ?? ''));
+?>
+<?php foreach ($gpustat_data as $gpu) : ?>
+<?php
+$gpuId = $gpu['id'];
+if (!in_array($gpuId, $selectedGpuIds, true)) continue;
+$displayName = $currentMultiGpus[$gpuId]['display_name'] ?? '';
+$escapedGpuId = htmlspecialchars($gpuId, ENT_QUOTES, 'UTF-8');
+$escapedModel = htmlspecialchars($gpu['model'], ENT_QUOTES, 'UTF-8');
+?>
+Display Name for <?= $escapedGpuId ?>:
+: <input type="text" name="DISPLAYNAME[<?= $escapedGpuId ?>]" value="<?= htmlspecialchars($displayName, ENT_QUOTES, 'UTF-8') ?>" placeholder="<?= $escapedModel ?>">
+<?php endforeach; ?>
+<?php endif; ?>
 
 Temperature Format:
 : <select id="TEMPFORMAT" name="TEMPFORMAT" size="1">

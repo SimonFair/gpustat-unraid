@@ -38,6 +38,16 @@ use gpustat\lib\Nvidia;
 use gpustat\lib\Intel;
 use gpustat\lib\Error;
 
+function gpustatDisplayName(array $statistics, array $gpu): array
+{
+    $realName = $statistics['name'] ?? ($gpu['model'] ?? '');
+    $displayName = trim((string)($gpu['display_name'] ?? ''));
+    $statistics['real_name'] = $realName;
+    if ($displayName !== '') $statistics['name'] = $displayName;
+
+    return $statistics;
+}
+
 if (!isset($gpustat_cfg)) {
     $gpustat_cfg = Main::getSettings();
 }
@@ -63,19 +73,19 @@ $array=json_decode($_GET['gpus'],true) ;
     switch ($gpu['vendor']) {
         case 'amd':
             $return=(new AMD($gpustat_cfg))->getStatistics();
-            $decode = json_decode($return,true);
+            $decode = gpustatDisplayName(json_decode($return,true), $gpu);
             $decode["panel"] = $gpu['panel'] ;
             $data[$gpu["id"]] = $decode;
             break;
         case 'intel':
             $return=(new Intel($gpustat_cfg))->getStatistics();
-            $decode = json_decode($return,true);
+            $decode = gpustatDisplayName(json_decode($return,true), $gpu);
             $decode["panel"] = $gpu['panel'] ;
             $data[$gpu["id"]] = $decode;
             break;
         case 'nvidia':
             $return = (new Nvidia($gpustat_cfg))->getStatistics() ;
-            $decode = json_decode($return,true);
+            $decode = gpustatDisplayName(json_decode($return,true), $gpu);
             $decode["panel"] = $gpu['panel'] ;
             $data[$gpu["id"]] = $decode;
             break;
